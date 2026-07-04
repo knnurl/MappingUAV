@@ -1,0 +1,49 @@
+# filepath: docs/gate7_watchdog_trip_runbook.txt
+# WP-E deliverable. HUMAN-EXECUTED ONLY, and only with gate6_planner_in_loop
+# CONFIRMED and the vehicle tethered. The agent never executes this file.
+
+OPEN VERIFICATION DEBT TOUCHING THIS GATE: none from WP-E (zero-debt package).
+Check docs/verification_debt.yaml for entries from other WPs before starting.
+
+Purpose: prove the geofence watchdog's hard action works on the real vehicle,
+and that the human procedure covers watchdog death itself.
+
+Preconditions
+[ ] Tether rigged per gate4 checklist; kill switch tested this session.
+[ ] geofence.yaml box verified against the ACTUAL room and tether length.
+[ ] Watchdog running (part of drone-autonomy.service), /geofence/state
+    heartbeat visible at 2 Hz from the ground station.
+[ ] Pilot briefed: on any anomaly, RC kill first, questions later.
+
+Test A - soft breach (props ON, tethered, POSITION mode hover)
+1. Hover at box centre, 1.0 m altitude.
+2. Pilot translates slowly toward +X face until inside the 0.5 m soft band.
+3. EXPECT: /geofence/alert ALERT_HOVER message; /geofence/hover_request
+   publishing; vehicle behavior unchanged (hover consumer not yet wired,
+   that is expected until WP-B integration).
+4. Return to centre. EXPECT alert clears only after ~0.2 m re-entry
+   (hysteresis) - verify in the alert log, not by feel.
+
+Test B - hard breach trip (props ON, tethered)
+1. Hover at box centre. 2. Pilot translates deliberately through the +X face.
+3. EXPECT within 0.2 s of crossing: NAV_LAND accepted by PX4 (QGC shows
+   Landing), watchdog log ERROR line, alert topic LAND message.
+4. EXPECT watchdog state stays HARD (latched) after landing; confirm the
+   node must be restarted to clear - this is by design.
+
+Test C - watchdog death mid-hover (props ON, tethered)
+1. Hover at box centre. 2. Ground station: kill the watchdog process
+   (systemctl kill --signal=SIGKILL on the unit, or kill -9 the pid).
+3. EXPECT: /geofence/state heartbeat stops within 0.5 s; ground-station
+   monitor raises the alarm; PILOT LANDS MANUALLY. This test verifies the
+   HUMAN procedure, not software: the watchdog has no self-restart guarantee
+   beyond systemd Restart=on-failure, which is also observed here.
+
+Test D - LIO silence (props OFF, bench, FC powered)
+1. Full pipeline up, watchdog require_streams_after_s set to 10.0.
+2. Stop the perception service (drone-perception.service).
+3. EXPECT: NAV_LAND commanded within ~1 s of /Odometry silence.
+
+Record all transcripts to docs/, then request gate7 evaluation from the
+operator. The agent may parse results; only the operator writes
+gate_status.yaml.

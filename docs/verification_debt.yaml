@@ -1,0 +1,13 @@
+# filepath: docs/verification_debt.yaml
+# The agent adds entries; only the human closes them.
+# Schema per masterplan §1.3:
+# - id: VD-001
+#   package: wp-x
+#   claim_untested: "..."
+#   original_criterion: "..."
+#   discharge_path: "..."
+#   status: OPEN
+#
+# WP-E (geofence_watchdog) carries ZERO entries by rule: all its logic is
+# unit- and node-level tested, executed 2026-07-04 (47 passing tests).
+debts: []
