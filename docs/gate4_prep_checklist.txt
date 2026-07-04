@@ -1,0 +1,25 @@
+# filepath: docs/gate4_prep_checklist.txt
+Preconditions, all verified and logged before first tethered spin-up:
+
+[ ] Gates 1-3 formally passed and their transcripts stored in docs/.
+[ ] gate3_ekf2.params re-read back from the FC and diffed against the file
+    (params can silently fail to save before a reboot).
+[ ] Mid-360 on foam standoffs; wiring strain-relieved; nothing enters the
+    lidar's blind radius when arms flex.
+[ ] Props balanced and correct rotation; motors mapped (Actuators test in QGC, props OFF first).
+[ ] Kill switch assigned and tested: RC kill -> immediate motor stop, while disarmed-bench-spinning.
+[ ] Vibration re-check WITH props at hover throttle on the tether:
+    fly nothing, just spin at low throttle strapped down, pull the log,
+    Flight Review vibration metrics in the green band. If not, LIO health under
+    vibration must be re-verified (repeat Gate 2 checks with motors running).
+[ ] Flow/range sanity: listener distance_sensor and listener optical_flow (or
+    sensor_optical_flow, [VERIFY] per firmware) show live plausible data.
+[ ] Tether anchored below and clear of props; test volume >= 3 x 3 x 2.5 m clear.
+[ ] Flight mode POSITION, MPC limits confirmed active (attempt aggressive stick
+    input on the bench, observe setpoint clamps in the log).
+[ ] Recording policy in force: rosbag limited to /Odometry and
+    /fmu/out/vehicle_odometry; PX4 .ulg logging enabled (that is the primary record).
+
+Gate 4 pass criteria (human pilot in the loop, from the master plan):
+position hold within +/- 10 cm for 2 continuous minutes, zero EKF resets,
+no LIO degradation events in the log.

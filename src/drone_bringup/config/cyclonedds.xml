@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- filepath: src/drone_bringup/config/cyclonedds.xml -->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain Id="any">
+    <General>
+      <!-- Bind to loopback + the wifi interface used by the ground station.
+           Verified against `ip link` on this Jetson: wlP1p1s0 (not wlan0). -->
+      <Interfaces>
+        <NetworkInterface name="lo"/>
+        <NetworkInterface name="wlP1p1s0"/>
+      </Interfaces>
+      <MaxMessageSize>65500B</MaxMessageSize>
+    </General>
+    <Internal>
+      <SocketReceiveBufferSize min="2MB" max="8MB"/>
+      <Watermarks>
+        <WhcHigh>2MB</WhcHigh>
+      </Watermarks>
+    </Internal>
+  </Domain>
+</CycloneDDS>

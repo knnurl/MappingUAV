@@ -1,0 +1,54 @@
+# filepath: src/drone_bringup/config/fast_lio_mid360_x500.yaml
+# Key structure copied exactly from FAST_LIO/config/mid360.yaml (ROS2 branch,
+# verified 2026-07-04); values per the Gates 1-4 handover spec. Memory-critical
+# settings on the 8GB Orin Nano: det_range 40, dense_publish_en false,
+# path_en false, pcd_save_en false. Do not enable any of them.
+/**:
+    ros__parameters:
+        feature_extract_enable: false
+        point_filter_num: 3            # keep 3 on Orin Nano; raise to 4 if CPU-bound
+        max_iteration: 3
+        filter_size_surf: 0.5          # indoor: drop to 0.3 ONLY if odometry is coarse AND CPU headroom exists
+        filter_size_map: 0.5
+        cube_side_length: 1000.0
+        runtime_pos_log_enable: false
+        map_file_path: "./test.pcd"    # unused while pcd_save_en is false
+
+        common:
+            lid_topic:  "/livox/lidar"
+            imu_topic:  "/livox/imu"
+            time_sync_en: false        # driver stamps both streams from the same source
+            time_offset_lidar_to_imu: 0.0
+
+        preprocess:
+            lidar_type: 1              # 1 = Livox serial LiDAR (CustomMsg)
+            scan_line:  4              # Mid-360
+            blind: 0.5                 # metres; must exceed prop/arm radius seen by the lidar
+            timestamp_unit: 3          # verified against repo mid360.yaml
+            scan_rate: 10
+
+        mapping:
+            acc_cov: 0.1
+            gyr_cov: 0.1
+            b_acc_cov: 0.0001
+            b_gyr_cov: 0.0001
+            fov_degree:    360.0
+            det_range:     40.0        # indoor; do not raise, controls ikd-tree memory
+            extrinsic_est_en:  false
+            # Lidar-frame -> built-in-IMU extrinsic, from Livox Mid-360 documentation. [FIXED]
+            extrinsic_T: [ -0.011, -0.02329, 0.04412 ]
+            extrinsic_R: [ 1., 0., 0.,
+                            0., 1., 0.,
+                            0., 0., 1.]
+
+        publish:
+            path_en: false             # off: unbounded memory growth over long runs
+            effect_map_en: false
+            map_en: false              # map cloud publishing off: memory/bandwidth
+            scan_publish_en:  true     # needed for ground-station sanity checks; disable for flight
+            dense_publish_en: false
+            scan_bodyframe_pub_en: false
+
+        pcd_save:
+            pcd_save_en: false         # Gate 2 walk test only; NEVER true during flight
+            interval: -1

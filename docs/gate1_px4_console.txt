@@ -1,0 +1,2 @@
+# filepath: docs/gate1_px4_console.txt (transcript of expected commands, human-run)
+uxrce_dds_client status     # expect: running, connected, TELEM2, 921600

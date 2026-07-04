@@ -1,0 +1,23 @@
+# filepath: .gitignore
+# colcon artifacts
+build/
+install/
+log/
+
+# third-party source trees: pinned via deploy/third_party.repos, not tracked
+src/px4_msgs/
+src/livox_ros_driver2/
+src/FAST_LIO/
+
+# recorded test data is large; tracked by manifest only
+test_data/*
+!test_data/manifest.yaml
+
+# python
+__pycache__/
+*.pyc
+
+# editor/OS noise
+.vscode/
+*.swp
+.DS_Store

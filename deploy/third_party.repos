@@ -1,0 +1,16 @@
+# filepath: deploy/third_party.repos
+# vcs import src < deploy/third_party.repos
+# Exact pins of the untracked third-party trees in src/ as built on 2026-07-04.
+repositories:
+  px4_msgs:
+    type: git
+    url: https://github.com/PX4/px4_msgs.git
+    version: a1045ec4feb6d709bdecaf3895f1d5b43a5dabb8   # release/1.15 (matches flashed FW v1.15.x)
+  livox_ros_driver2:
+    type: git
+    url: https://github.com/Livox-SDK/livox_ros_driver2.git
+    version: 13eb05e4e6dd7a765b934d0c5fd6236676a57b49   # master @ build date
+  FAST_LIO:
+    type: git
+    url: https://github.com/hku-mars/FAST_LIO.git
+    version: a4743b095409588842a5b30ddfa27e29d2f99164   # ROS2 branch; submodule ikd-Tree e2e3f4e
