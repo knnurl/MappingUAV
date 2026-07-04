@@ -1,0 +1,20 @@
+# filepath: deploy/systemd/drone-autonomy.service
+# Aerostack2 + planner + geofence watchdog. THE ENABLE/DISABLE TOGGLE OF THIS
+# UNIT IS THE ON-VEHICLE SOFTWARE KILL FOR AUTONOMY (masterplan WP-G).
+# Ships disabled; integration requires the gate5 token.
+[Unit]
+Description=Drone: autonomy layer (AS2 + planner + geofence watchdog)
+After=drone-perception.service
+Requires=drone-perception.service
+
+[Service]
+User=neric
+Environment=HOME=/home/neric
+ExecStart=/home/neric/colcon_ws/scripts/run_autonomy.sh
+Restart=on-failure
+RestartSec=3
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

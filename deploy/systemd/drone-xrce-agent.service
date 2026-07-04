@@ -1,0 +1,20 @@
+# filepath: deploy/systemd/drone-xrce-agent.service
+# Gate 1 link as a service. Enable only after gate1 token workflow allows
+# vehicle integration; harmless on the bench (idles when FC absent).
+[Unit]
+Description=Drone: Micro XRCE-DDS agent on TELEM2 (/dev/ttyTHS1)
+After=drone-clocks.service
+Wants=drone-clocks.service
+
+[Service]
+User=neric
+Environment=HOME=/home/neric
+ExecStart=/usr/local/bin/MicroXRCEAgent serial --dev /dev/ttyTHS1 -b 921600
+Restart=on-failure
+RestartSec=2
+# journald flood guard:
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

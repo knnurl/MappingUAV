@@ -1,0 +1,15 @@
+# filepath: deploy/systemd/drone-clocks.service
+# Boot oneshot: lock the Orin Nano to max performance (masterplan WP-G).
+# Install: sudo cp to /etc/systemd/system/, sudo systemctl enable drone-clocks
+[Unit]
+Description=Drone: nvpmodel max + jetson_clocks at boot
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nvpmodel -m 0
+ExecStart=/usr/bin/jetson_clocks
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
