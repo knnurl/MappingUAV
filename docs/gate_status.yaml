@@ -1,0 +1,15 @@
+# filepath: docs/gate_status.yaml
+# ONLY the human operator edits this file. The agent parses it at the start of
+# every session and treats it as strictly read-only.
+gate1_xrce_link:        PENDING
+gate2_lio_bench:        PENDING
+gate3_ekf2_fusion:      PENDING
+gate4_tethered_hover:   PENDING
+gate5_as2_behaviors:    PENDING
+gate6_planner_in_loop:  PENDING
+gate7_exploration:      PENDING
+gate5_debt_review:      PENDING
+gate6_debt_review:      PENDING
+gate7_debt_review:      PENDING
+decision_dp1_mapping:   UNDECIDED   # human sets: NVBLOX or CPU_GRID
+decision_dp2_explore:   UNDECIDED   # human sets: FUEL or TARE
