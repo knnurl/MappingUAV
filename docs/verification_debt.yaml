@@ -1,0 +1,11 @@
+# filepath: docs/verification_debt.yaml
+# The agent adds entries; only the human closes them.
+# Schema per masterplan §1.3. (VD-001 on wp-g-ops, VD-002 on wp-c-mapping;
+# union at merge.)
+debts:
+  - id: VD-003
+    package: wp-f
+    claim_untested: "FUEL vs TARE exploration coverage/efficiency comparison (full benchmark requires the deferred sim rig); TARE aarch64 compile-health also unexecuted pending operator approval of third-party build"
+    original_criterion: "candidate survey with build health on Humble/aarch64"
+    discharge_path: "operator approves TARE build attempt; coverage benchmark after sim phase exists"
+    status: OPEN

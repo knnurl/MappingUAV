@@ -21,3 +21,5 @@ __pycache__/
 .vscode/
 *.swp
 .DS_Store
+src/octomap/
+src/octomap_msgs/
