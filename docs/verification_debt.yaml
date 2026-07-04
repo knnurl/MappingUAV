@@ -1,0 +1,10 @@
+# filepath: docs/verification_debt.yaml
+# The agent adds entries; only the human closes them.
+# Schema per masterplan §1.3. (VD-001 lives on wp-g-ops; union at merge.)
+debts:
+  - id: VD-002
+    package: wp-c
+    claim_untested: "map_interface occupancy/ESDF correctness and compute against REAL Mid-360 /cloud_registered data (all current verification uses procedural room+pillar clouds)"
+    original_criterion: "VERIFIED_ON_BAGS once Gate 2/3 bags exist"
+    discharge_path: "record bags per masterplan §5 at Gate 2/3 bench sessions; re-run tools/replay_tests/ with bag playback replacing the synthetic feeder"
+    status: OPEN

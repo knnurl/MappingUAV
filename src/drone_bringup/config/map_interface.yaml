@@ -1,0 +1,21 @@
+# filepath: src/drone_bringup/config/map_interface.yaml
+# WP-C map server parameters. Frame: odom / ENU [FIXED] — planners never
+# consume NED. Bounds should enclose (and slightly exceed) the geofence box
+# after converting it from NED; keep them room-sized, they bound octomap +
+# ESDF memory. RESIZE for the actual mission volume before Gate 6.
+map_interface:
+  ros__parameters:
+    map_backend: cpu_grid   # nvblox only after decision_dp1_mapping = NVBLOX
+    resolution: 0.2         # coarse global grid [masterplan §5]
+    x_min: -10.0
+    x_max: 10.0
+    y_min: -10.0
+    y_max: 10.0
+    z_min: -0.5
+    z_max: 3.0
+    clearance_cap: 4.0
+    unknown_as_occupied: false
+    insert_period_s: 0.5    # 2 Hz insertion; 10 Hz would blow the CPU budget
+    max_insert_range: 8.0
+    edt_period_s: 2.0
+    map_publish_period_s: 2.0

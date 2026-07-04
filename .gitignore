@@ -8,6 +8,8 @@ log/
 src/px4_msgs/
 src/livox_ros_driver2/
 src/FAST_LIO/
+src/octomap/
+src/octomap_msgs/
 
 # recorded test data is large; tracked by manifest only
 test_data/*
