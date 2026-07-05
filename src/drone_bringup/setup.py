@@ -17,6 +17,7 @@ setup(
         (os.path.join('share', package_name, 'config'),
          [f for f in glob('config/*') if os.path.isfile(f)]),
         (os.path.join('share', package_name, 'config', 'px4'), glob('config/px4/*')),
+        (os.path.join('share', package_name, 'config', 'as2'), glob('config/as2/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

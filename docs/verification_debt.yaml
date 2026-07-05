@@ -1,0 +1,17 @@
+# filepath: docs/verification_debt.yaml
+# The agent adds entries; only the human closes them.
+# Schema per masterplan §1.3. (VD-001 wp-g, VD-002 wp-c, VD-003 wp-f live on
+# their branches; union at merge.)
+debts:
+  - id: VD-004
+    package: wp-b
+    claim_untested: "AS2 takeoff/go_to/land behavior transitions under PX4 offboard, offboard-keepalive continuity, and controller gain sanity — closed loop never executed (no sim, no vehicle token)"
+    original_criterion: "closed-loop behavior run (masterplan §7 cap: BUILT_UNVERIFIED)"
+    discharge_path: "SITL later, or first vehicle session after gate4 token per gate5 runbook; missions/bench_box.py is the acceptance mission"
+    status: OPEN
+  - id: VD-005
+    package: wp-b
+    claim_untested: "as2_platform_pixhawk px4_msgs 1.15 compatibility beyond compile: runtime topic/QoS handshake with the v1.15 uXRCE agent (platform pins release/1.14 upstream; 3-line SensorGps patch applied from deploy/patches/)"
+    original_criterion: "platform [VERIFY] against our px4_msgs branch"
+    discharge_path: "gate5 bench session with FC powered: verify platform sees /fmu/out topics and offboard handshake works before any arming"
+    status: OPEN

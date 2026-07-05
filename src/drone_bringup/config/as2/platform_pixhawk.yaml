@@ -1,0 +1,19 @@
+# filepath: src/drone_bringup/config/as2/platform_pixhawk.yaml
+# WP-B: as2_platform_pixhawk configuration for the X500.
+# ARCHITECTURAL CONSTRAINTS [FIXED, masterplan §7]:
+#  - external_odom stays FALSE: px4_odom_bridge (Gate 3) is the ONLY writer
+#    of /fmu/in/vehicle_visual_odometry, and EKF2 is the one estimator of
+#    record. Setting this true would create a second EV publisher and
+#    dual-estimator divergence.
+#  - X500 hover thrust ~ mid-stick; max_thrust bounds the attitude-mode
+#    thrust mapping. Values below are bench-safe placeholders; the platform
+#    is not integrated on the vehicle until the gate5 token anyway.
+/**:
+  ros__parameters:
+    cmd_freq: 100.0          # Hz of platform command stream (offboard keepalive)
+    info_freq: 10.0
+    max_thrust: 25.0         # N, ~4x X500 hover thrust headroom [MEASURE at gate5 tuning]
+    min_thrust: 0.5          # N
+    external_odom: false     # [FIXED] see header
+    fmu_prefix: ''
+    target_system_id: 1
