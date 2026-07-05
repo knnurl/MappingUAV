@@ -30,18 +30,20 @@ EVIDENCE_ONLY.
   2. Google publishes an arm64 or-tools v9.8 tarball (debian-11 asset; glibc
      2.31 binaries, expected compatible with Ubuntu 22.04). Swapped into the
      source tree cleanly (include/ + lib/).
-  3. **Compile execution is PENDING OPERATOR APPROVAL:** the agent's
-     environment permission layer blocked building the third-party tree with
-     swapped-in binary libraries (untrusted-code-integration class). Working
-     tree with the swap prepared under the session scratchpad
-     (`tare_planner/` + `or-tools_aarch64_...`). No verdict is claimed.
+  3. **Compile-health verdict (operator-approved, executed 2026-07-05):
+     PASS.** `humble-jazzy` branch builds clean on Humble/aarch64 in 5m18s
+     (warnings only, zero errors) with Google's arm64 v9.8 or-tools tarball
+     (debian-11 asset) swapped into `src/tare_planner/or-tools/`; the
+     resulting `tare_planner_node` fully resolves all shared libraries on
+     Ubuntu 22.04 (glibc 2.35 covers 2.31). The or-tools swap is the only
+     modification — record it as a required import step if TARE is chosen.
 
 ## Current standing (agent, non-binding)
-TARE is ahead on every measurable axis: official ROS2 branches, active
-maintenance, aerial companion environment. FUEL's lack of any ROS2 port
-makes it a porting project, not an adoption. A final recommendation awaits
-the TARE compile-health verdict on aarch64 (operator to approve the build)
-and, ideally, the deferred coverage benchmark.
+**TARE.** Official ROS2 branches, active maintenance, aerial companion
+environment, and a PASSING compile-health verdict on this exact board. FUEL
+has no ROS2 port at all — adopting it means porting it. Remaining unknowns
+for TARE are behavioral (aerial variant fit, coverage efficiency), which sit
+behind the deferred sim benchmark (VD-003).
 
 Decision belongs to the human: set `decision_dp2_explore` in
 docs/gate_status.yaml.
