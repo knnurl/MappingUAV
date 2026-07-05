@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- filepath: src/planner_shim/package.xml -->
+<package format="3">
+  <name>planner_shim</name>
+  <version>0.1.0</version>
+  <description>WP-D go_to_with_avoidance wrapper: goal/trajectory validity gating between EGO planner and the AS2 motion pipeline</description>
+  <maintainer email="k.ural1@salford.ac.uk">kaan</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <test_depend>python3-pytest</test_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

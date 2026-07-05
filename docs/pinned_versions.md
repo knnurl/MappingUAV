@@ -12,3 +12,6 @@
 Additions for Phases 3–7 (Aerostack2, EGO-Planner ports, Bonxai/OctoMap, nvblox,
 FUEL/TARE candidates) are appended here by their work packages with provenance
 and diff surface, per masterplan §6/§7.
+
+| ego-planner-swarm | github.com/ZJU-FAST-Lab/ego-planner-swarm | `23a8d5a1` (ros2_version) | Official authors' ROS2 branch; smoke-builds clean on Humble/aarch64 (7 planner pkgs, 5m45s, 2026-07-05). Sim/swarm packages COLCON_IGNOREd per no-sim/no-multi-drone rules |
+| tare_planner (DP-2 candidate) | github.com/caochao39/tare_planner | humble-jazzy @ 2026-07-05 | Compile-health PASS with arm64 or-tools v9.8 swap (see docs/dp2_evidence.md); adoption awaits decision_dp2_explore |

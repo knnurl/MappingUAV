@@ -1,0 +1,11 @@
+# filepath: docs/verification_debt.yaml
+# The agent adds entries; only the human closes them.
+# Schema per masterplan §1.3. (VD-001 wp-g, VD-002 wp-c, VD-003 wp-f,
+# VD-004/005 wp-b live on their branches; union at merge.)
+debts:
+  - id: VD-006
+    package: wp-d
+    claim_untested: "go_to_with_avoidance closed loop: EGO planner -> shim gating -> AS2 motion pipeline -> PX4 offboard; EGO topic names parameterized but unverified against the pinned ros2_version at runtime"
+    original_criterion: "closed-loop planner-to-offboard run (masterplan §6 cap: BUILT_UNVERIFIED)"
+    discharge_path: "SITL later, or gate6 integration session; unit-tested pieces (goal/trajectory validity, LIO health) are executed and passing"
+    status: OPEN

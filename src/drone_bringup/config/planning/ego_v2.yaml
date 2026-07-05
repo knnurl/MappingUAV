@@ -1,0 +1,12 @@
+# filepath: src/drone_bringup/config/planning/ego_v2.yaml
+# WP-D: EGO planner envelope for the X500 (masterplan §6 values, [FIXED]
+# conservative on purpose; tuning is a human Gate 6 activity).
+# Frame [FIXED]: odom / ENU. The planner never consumes NED.
+ego_planner:
+  ros__parameters:
+    max_vel: 1.0            # m/s — matches MPC_XY_VEL_MAX safety envelope
+    max_acc: 2.0            # m/s^2
+    planning_horizon: 5.0   # m
+    obstacle_inflation: 0.4 # m
+    # Consumed by the go_to_with_avoidance wrapper for pre-flight checks:
+    geofence_frame: odom

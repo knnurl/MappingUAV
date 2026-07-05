@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- filepath: src/lio_health_guard/package.xml -->
+<package format="3">
+  <name>lio_health_guard</name>
+  <version>0.1.0</version>
+  <description>Derived FAST-LIO health guard (WP-D degeneracy backstop): rate/jump/finite checks on /Odometry, hover request on degradation</description>
+  <maintainer email="k.ural1@salford.ac.uk">kaan</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
+  <test_depend>python3-pytest</test_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

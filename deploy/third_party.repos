@@ -14,3 +14,7 @@ repositories:
     type: git
     url: https://github.com/hku-mars/FAST_LIO.git
     version: a4743b095409588842a5b30ddfa27e29d2f99164   # ROS2 branch; submodule ikd-Tree e2e3f4e
+  ego-planner-swarm:
+    type: git
+    url: https://github.com/ZJU-FAST-Lab/ego-planner-swarm.git
+    version: 23a8d5a191711dd65633df689bd00f55d4dea8f9   # official ros2_version branch @ 2025-03-08; COLCON_IGNORE uav_simulator (except Utils/quadrotor_msgs, Utils/cmake_utils), drone_detect, rosmsg_tcp_bridge
