@@ -1,0 +1,31 @@
+# filepath: src/drone_bringup/config/px4/migration_from_ardupilot.params
+# Values salvaged from the ArduPilot 4.5.4 dump (docs/ardupilot_4.5.4_params_
+# pre_reflash.txt) for the PX4 v1.15 reflash. Apply via QGC AFTER the
+# airframe preset and sensor calibration, alongside gate3_ekf2.params.
+# Same physical hardware, so these transfer; each carries its AP source.
+
+# ---- Optical flow (HereFlow) mounting — resolves two [MEASURE] items ----
+SENS_FLOW_ROT     0        # AP FLOW_ORIENT_YAW=0 (mounting unchanged)
+EKF2_OF_POS_X     0.07     # AP FLOW_POS_X [VERIFY convention: AP is IMU-
+EKF2_OF_POS_Y     0.05     # relative FRD; PX4 same. Sanity-check signs on
+EKF2_OF_POS_Z     0.11     # the airframe before Gate 4.]
+
+# ---- Power module calibration (same PM, values transfer) ----
+BAT1_V_DIV        18.18    # AP BATT_VOLT_MULT
+BAT1_A_PER_V      36.36    # AP BATT_AMP_PERVLT
+BAT1_N_CELLS      6        # AP low/crit voltages (21.2/20.4 V) imply 6S
+
+# ---- Hover throttle starting point (X500 flight-proven on AP) ----
+MPC_THR_HOVER     0.62     # AP MOT_THST_HOVER learned value 0.6209
+
+# ---- Downward rangefinder: Benewake serial (22 m max => TF02-class) ----
+# WIRING CHANGE REQUIRED: on AP it sat on SERIAL2 = TELEM2, which PX4 needs
+# for the uXRCE-DDS link. Move the rangefinder to the GPS2/UART4 port, then:
+SENS_TFMINI_CFG   202      # GPS2 [VERIFY]: pick the port by NAME in the QGC
+                           # dropdown, enum may differ per board
+# EKF2_RNG_CTRL already set in gate3_ekf2.params (conditional aiding).
+# NOTE: the HereFlow also publishes its own short-range VL53 distance
+# (0.08-0.65 m) over DroneCAN. [VERIFY] at Gate 3 bench: `listener
+# distance_sensor` must show the TF02 as the instance EKF2 consumes; if the
+# VL53 shadows it, disable the VL53 publication on the HereFlow or map
+# instances explicitly.
