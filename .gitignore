@@ -8,6 +8,9 @@ log/
 src/px4_msgs/
 src/livox_ros_driver2/
 src/FAST_LIO/
+src/as2_platform_pixhawk/
+src/octomap/
+src/octomap_msgs/
 
 # recorded test data is large; tracked by manifest only
 test_data/*
@@ -16,6 +19,7 @@ test_data/*
 # python
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # editor/OS noise
 .vscode/

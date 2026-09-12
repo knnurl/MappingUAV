@@ -14,3 +14,15 @@ repositories:
     type: git
     url: https://github.com/hku-mars/FAST_LIO.git
     version: a4743b095409588842a5b30ddfa27e29d2f99164   # ROS2 branch; submodule ikd-Tree e2e3f4e
+  as2_platform_pixhawk:
+    type: git
+    url: https://github.com/aerostack2/as2_platform_pixhawk.git
+    version: 482563ba979baea965df918995c141a362e26637   # main @ 2026-07-05; apply deploy/patches/as2_platform_pixhawk_px4msgs_1.15.patch after import
+  octomap:
+    type: git
+    url: https://github.com/OctoMap/octomap.git
+    version: 007a0b5b6e4d3bb6c54f2c65a12234e03adcd72f   # tag v1.10.0 (master's cmake exports broken); octovis COLCON_IGNOREd
+  octomap_msgs:
+    type: git
+    url: https://github.com/OctoMap/octomap_msgs.git
+    version: 50eece2bfc2f3163b2fb70b9157356e12d375dff   # ros2 branch @ build date
