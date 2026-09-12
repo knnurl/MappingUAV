@@ -11,7 +11,11 @@ UXRCE_DDS_SYNCT   1        # timesync ON; odom_bridge_node timestamps depend on 
 # ---- EKF2: external vision as primary, indoor profile ----
 EKF2_EV_CTRL      11       # bit0 hpos + bit1 vpos + bit3 yaw = 11. Velocity NOT fused. [FIXED]
 EKF2_HGT_REF      3        # vision height reference
-EKF2_EV_DELAY     50.0     # ms, initial guess; tune from log cross-correlation after Gate 3
+EKF2_EV_DELAY     5.0      # ms, RESIDUAL only [MEASURE at Gate 3]. px4_odom_bridge stamps
+                           # timestamp_sample with the LIO scan-end time, so FAST-LIO
+                           # processing latency is already removed; this covers Mid-360
+                           # Ethernet + driver arrival latency. Was 50.0 when the bridge
+                           # stamped with now(). Tune from log cross-correlation.
 EKF2_EV_NOISE_MD  1        # use fixed noise params below, ignore message covariance
 EKF2_EVP_NOISE    0.05     # m
 EKF2_EVA_NOISE    0.05     # rad
