@@ -11,7 +11,7 @@ Usage:
 
 Views (subscribe off-board, same ROS_DOMAIN_ID):
     /camera/camera/color/image_raw          640x480@30
-    /camera/camera/depth/image_rect_raw     848x480@30 (16UC1, mm)
+    /camera/camera/depth/image_rect_raw     ~424x240@30 (16UC1, mm; decimation x2)
   Raw 640x480 RGB at 30 Hz is ~220 Mbit/s: over WiFi use image_transport
   compressed / compressedDepth (image_transport_plugins) or lower the fps, or
   the camera will starve telemetry on the shared DDS link. Never bag raw images
@@ -40,10 +40,10 @@ def generate_launch_description():
             description='Colored pointcloud stream (true/false). Off: views only; '
                         'measured 30-59% of one core when on.'),
         DeclareLaunchArgument(
-            'decimation', default_value='false',
-            description='Depth decimation filter. Off: the depth view keeps native 848x480. '
-                        'Only worth enabling together with pointcloud:=true '
-                        '(it lowers the depth IMAGE resolution for all consumers).'),
+            'decimation', default_value='true',
+            description='Depth decimation filter [operator: on, magnitude 2]. Lowers the '
+                        'depth IMAGE resolution for all consumers (~424x240 at x2) and '
+                        'cuts CPU. false => native 848x480.'),
         DeclareLaunchArgument(
             'decimation_magnitude', default_value='2',
             description='Decimation factor, valid 2-8 (2 => depth ~424x240, ~32k pts).'),
@@ -80,7 +80,8 @@ def generate_launch_description():
                     LaunchConfiguration('decimation_magnitude'), value_type=int),
 
                 # --- resolution / fps ---
-                # depth left at native 848x480x30 (best depth quality; decimation trims it).
+                # depth sensor runs at native 848x480x30; decimation x2 (default)
+                # publishes ~424x240.
                 # color pinned to 640x480x30: ~3x less USB bandwidth than 720p, negligible
                 # CPU change but avoids frame drops on the shared USB3 bus.
                 # 'depth_module.depth_profile': '848,480,30',
