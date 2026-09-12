@@ -36,7 +36,7 @@ flowchart LR
     LIO -->|"/Odometry"| BR["px4_odom_bridge"]
     LIO -->|"/Odometry"| HG["lio_health_guard"]
     LIO -->|"/cloud_registered"| MAP["map_interface (CPU grid)"]
-    EXP["exploration planner (DP-2)"] -->|goals| SHIM["planner_shim"]
+    EXP["frontier_explorer (DP-2)"] -->|goals| SHIM["planner_shim"]
     EGO["EGO-Planner-v2"] -->|trajectories| SHIM
     MAP -->|QueryMap| SHIM
     SHIM --> AS2["Aerostack2: platform + behaviours"]
@@ -100,7 +100,7 @@ debt (`docs/verification_debt.yaml` on the work-package branches).
 | Decision | Outcome |
 |---|---|
 | DP-1 mapping backend | **CPU_GRID**: OctoMap v1.10 + dynamicEDT3D, 0.2 m voxels, bounded to the geofence (operator decision 2026-09-12). nvblox was rejected: it has no ingestion path for the Mid-360's non-repetitive scan, and needs the heavy Isaac ROS stack on an 8 GB board. |
-| DP-2 exploration planner | **Open.** TARE leads: official ROS 2 Humble branch, compiles on this Orin with an arm64 or-tools swap. FUEL has no ROS 2 port. Evidence on `wp-f-dp2-survey`. |
+| DP-2 exploration planner | **FRONTIER**: an in-house frontier explorer on the CPU grid, sending validated goals through `planner_shim` (operator decision 2026-09-12). TARE was not chosen (a ground-vehicle planner whose aerial variant is commercial), nor FUEL (no ROS 2 port). Spec: [`docs/wp-f_frontier_explorer_spec.md`](docs/wp-f_frontier_explorer_spec.md); verified reference prototype: [`tools/frontier_prototype/`](tools/frontier_prototype/). |
 | Middleware | CycloneDDS on the vehicle. Zenoh only at a future multi-drone network boundary. |
 | D435i role | Color + depth views only; 3D perception comes from the Mid-360. |
 
@@ -127,7 +127,8 @@ src/px4_odom_bridge/   FAST-LIO2 → PX4 external-vision bridge (+ unit tests)
 scripts/               environment setup, per-gate verification, run_qgc.sh
 docker/qgc/            QGroundControl container (the aarch64 AppImage needs a newer glibc than JetPack 6)
 deploy/                third-party pins (third_party.repos) and patches
-docs/                  gate status, runbooks, pinned versions, build report
+docs/                  gate status, runbooks, pinned versions, build report, WP-F explorer spec
+tools/frontier_prototype/  verified reference prototype of the WP-F explorer algorithm (not a ROS package)
 ```
 
 Third-party sources (`px4_msgs`, `livox_ros_driver2`, `FAST_LIO`,
