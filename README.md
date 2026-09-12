@@ -6,12 +6,6 @@ fused into PX4, an Aerostack2 behaviour layer, obstacle-aware waypoint
 navigation, and autonomous exploration inside an operator-defined geofence, all
 running on a Jetson Orin Nano.
 
-> **Status (2026-09-12): bring-up, not yet flown.** No gate has passed. The
-> flight controller arrived running ArduPilot 4.5.4 and is being reflashed to
-> PX4 v1.15 ([runbook](docs/px4_reflash_runbook.md)). The Phase 3–7 software
-> is built on `wp-*` branches (status per branch [below](#branches)) and is
-> integrated only as the gates open.
-
 ## Mission
 
 1. **Autonomous exploration** of an indoor space inside a pre-set geofence box,
