@@ -20,6 +20,7 @@ test_data/*
 __pycache__/
 *.pyc
 .pytest_cache/
+.hypothesis/
 
 # editor/OS noise
 .vscode/
