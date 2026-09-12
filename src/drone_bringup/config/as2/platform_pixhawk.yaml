@@ -3,8 +3,10 @@
 # ARCHITECTURAL CONSTRAINTS [FIXED, masterplan §7]:
 #  - external_odom stays FALSE: px4_odom_bridge (Gate 3) is the ONLY writer
 #    of /fmu/in/vehicle_visual_odometry, and EKF2 is the one estimator of
-#    record. Setting this true would create a second EV publisher and
-#    dual-estimator divergence.
+#    record. Setting this true would make the platform republish AS2's
+#    odometry (EKF2's own output) into EKF2's EV input at 100 Hz: a feedback
+#    loop that outvotes LIO 10:1. gate5_as2.launch.py refuses to launch unless
+#    this is false.
 #  - X500 hover thrust ~ mid-stick; max_thrust bounds the attitude-mode
 #    thrust mapping. Values below are bench-safe placeholders; the platform
 #    is not integrated on the vehicle until the gate5 token anyway.

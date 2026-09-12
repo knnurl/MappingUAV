@@ -11,8 +11,17 @@ reading the PX4-fused estimate — ONE estimator of record) + motion
 controller (PID speed controller plugin, AS2 default position pipeline) +
 motion behaviors (takeoff / go_to / land / hover). Trajectory/ACRO paths
 deliberately not enabled [FIXED].
+
+SOLE EV WRITER [FIXED]: px4_odom_bridge is the only node allowed to send on
+/fmu/in/vehicle_visual_odometry. This launch refuses to start unless
+platform_pixhawk.yaml sets external_odom: false. Expected at Gate 5:
+`ros2 topic info -v /fmu/in/vehicle_visual_odometry` lists TWO publishers,
+px4_odom_bridge (RELIABLE, sending ~10 Hz) and <namespace>/platform
+(BEST_EFFORT, silent: pixhawk_platform.cpp:134 creates it unconditionally).
+Only px4_odom_bridge may be sending; the bridge logs every other publisher.
 """
 import os
+import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -21,10 +30,28 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
+def assert_external_odom_off(platform_cfg_path):
+    """Refuse to launch unless the platform's EV publisher stays silent.
+
+    external_odom:=true makes the platform republish AS2's odometry, which is
+    EKF2's own output, back into EKF2's EV input at 100 Hz (a feedback loop
+    that outvotes LIO 10:1). A missing key also fails: the platform declares the
+    parameter without a default.
+    """
+    with open(platform_cfg_path) as f:
+        params = yaml.safe_load(f)['/**']['ros__parameters']
+    if params.get('external_odom') is not False:
+        raise RuntimeError(
+            f'{platform_cfg_path}: external_odom must be false (got '
+            f'{params.get("external_odom")!r}). px4_odom_bridge is the sole writer of '
+            '/fmu/in/vehicle_visual_odometry [FIXED, masterplan §7].')
+
+
 def generate_launch_description():
     bringup_share = get_package_share_directory('drone_bringup')
     as2_cfg = os.path.join(bringup_share, 'config', 'as2')
     platform_share = get_package_share_directory('as2_platform_pixhawk')
+    assert_external_odom_off(os.path.join(as2_cfg, 'platform_pixhawk.yaml'))
 
     namespace = LaunchConfiguration('namespace')
 
