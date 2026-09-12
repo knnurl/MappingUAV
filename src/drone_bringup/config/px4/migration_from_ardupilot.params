@@ -18,14 +18,19 @@ BAT1_N_CELLS      6        # AP low/crit voltages (21.2/20.4 V) imply 6S
 # ---- Hover throttle starting point (X500 flight-proven on AP) ----
 MPC_THR_HOVER     0.62     # AP MOT_THST_HOVER learned value 0.6209
 
-# ---- Downward rangefinder: Benewake serial (22 m max => TF02-class) ----
+# ---- Downward rangefinder: Benewake serial (AP RNGFND2_TYPE 20, 0.55-22 m) ----
 # WIRING CHANGE REQUIRED: on AP it sat on SERIAL2 = TELEM2, which PX4 needs
-# for the uXRCE-DDS link. Move the rangefinder to the GPS2/UART4 port, then:
-SENS_TFMINI_CFG   202      # GPS2 [VERIFY]: pick the port by NAME in the QGC
+# for the uXRCE-DDS link. Move the rangefinder to TELEM3, then:
+SENS_TFMINI_CFG   103      # TELEM3 [VERIFY]: pick the port by NAME in the QGC
                            # dropdown, enum may differ per board
+# No SER_TEL3_BAUD: the tfmini driver hardcodes B115200 (TFMINI.cpp:109) and
+# declares no baudrate in module.yaml, so PX4 never creates that parameter for
+# this port. AP ran the same 115200 (SERIAL2_BAUD 115), so the rate matches.
 # EKF2_RNG_CTRL already set in gate3_ekf2.params (conditional aiding).
-# NOTE: the HereFlow also publishes its own short-range VL53 distance
-# (0.08-0.65 m) over DroneCAN. [VERIFY] at Gate 3 bench: `listener
-# distance_sensor` must show the TF02 as the instance EKF2 consumes; if the
-# VL53 shadows it, disable the VL53 publication on the HereFlow or map
-# instances explicitly.
+# CONFIRMED from the AP dump (not hypothetical): two downward rangefinders are
+# configured. RNGFND1 = DroneCAN VL53L1X on the HereFlow, 0.08-0.65 m, at
+# instance 1; RNGFND2 = this Benewake, 0.55-22 m. Both ORIENT 25 (down), and
+# they overlap only over 0.55-0.65 m. PX4 instance ordering is NOT AP's.
+# BLOCKING before Gate 3: `listener distance_sensor` must show which instance
+# EKF2 consumes. If it is the VL53, height aiding saturates at 0.65 m —
+# disable the VL53 publication on the HereFlow before any tethered hover.

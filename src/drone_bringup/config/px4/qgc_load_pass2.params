@@ -1,0 +1,14 @@
+# Onboard parameters for Vehicle 1
+#
+# PASS 2 of 2 — load AFTER pass 1 and a reboot. PX4 only instantiates a port's
+# baud parameter once a module that declares a CONFIGURABLE baud claims it, so
+# these do not exist on a fresh flash and a pass-1 write of them is dropped.
+#
+# There is deliberately no SER_TEL3_BAUD here. The tfmini driver declares no
+# baudrate in its module.yaml and hardcodes B115200 (TFMINI.cpp:109), so PX4
+# never creates that parameter for a TELEM3 assigned to it. 115200 is also what
+# ArduPilot used (SERIAL2_BAUD 115), so the rate already matches.
+#
+# Vehicle-Id Component-Id Name Value Type
+1	1	SER_TEL2_BAUD	921600	6
+1	1	UXRCE_DDS_SYNCT	1	6

@@ -180,7 +180,7 @@ never runs on the vehicle. Over WiFi, view the camera through compressed
 
 ## Documentation
 
-- [`docs/px4_reflash_runbook.md`](docs/px4_reflash_runbook.md): ArduPilot → PX4 migration
+- [`docs/px4_reflash_runbook.md`](docs/px4_reflash_runbook.md): ArduPilot → PX4 migration record (completed 2026-09-13)
 - [`docs/build_report_gates1-4.md`](docs/build_report_gates1-4.md): build and discrepancy report
 - [`docs/pinned_versions.md`](docs/pinned_versions.md): third-party pins
 
