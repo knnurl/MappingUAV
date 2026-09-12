@@ -41,7 +41,7 @@ The node owns only goal selection. It does not map, avoid obstacles, generate tr
 ### 1.3 Preconditions, tokens, status and branch
 | Kind | Requirement | State today |
 |---|---|---|
-| Build precondition (masterplan §8) | WP-C `map_interface` merged | **Not met.** `map_interface` lives on `wp-c-mapping`. **Deviation proposed (OI-1):** build on `wp-f-frontier`, created from `wp-d-planner` with `wp-c-mapping` merged in. Requires operator acknowledgement. |
+| Build precondition (masterplan §8) | WP-C `map_interface` merged | **Not met; waiting.** `map_interface` lives on `wp-c-mapping` and reaches `main` only after the `gate5_as2_behaviors` token (masterplan §1.1 rule 3). Operator decision 2026-09-13 (OI-1): no deviation, so no WP-F implementation code is written until then. |
 | Decision precondition | `decision_dp2_explore` set by the human | **Met.** `decision_dp2_explore: FRONTIER` and `decision_dp1_mapping: CPU_GRID` are recorded in `docs/gate_status.yaml` (2026-09-12, operator commit pending). Masterplan amendment A1 (2026-09-13) adds FRONTIER as a DP-2 candidate (OI-7 resolved). |
 | Status cap (masterplan §8) | EVIDENCE_ONLY until the decision; BUILT_UNVERIFIED for the explorer afterwards | Implementation commits: BUILT_UNVERIFIED. This spec and `tools/frontier_prototype/` remain EVIDENCE_ONLY. |
 | Integration precondition | `gate6_planner_in_loop: CONFIRMED` | PENDING |
@@ -50,7 +50,7 @@ The node owns only goal selection. It does not map, avoid obstacles, generate tr
 
 The agent never edits `docs/gate_status.yaml`; only the operator records the decision (masterplan §1.1).
 
-Expected merge conflicts when creating the branch: `docs/verification_debt.yaml`, `docs/pinned_versions.md`, `deploy/third_party.repos`, `src/drone_bringup/setup.py`. Resolve all by union. While doing so, fix OI-11: `wp-d`'s `setup.py` does not install `config/planning/`.
+Once `map_interface` and `planner_shim` are on `main` (after their gate tokens), create `wp-f-frontier` from `main`. Fix OI-11 (`wp-d`'s `setup.py` does not install `config/planning/`) on `wp-d-planner` before it merges.
 
 ## 2. Conventions and definitions
 
@@ -653,7 +653,7 @@ Global rules carried over from the Gates 1–4 handover: every new file begins w
 
 `planner_shim` is imported for `shim_core.EnuBox` and `check_goal`, keeping one source of truth for goal admissibility. Entry point: `explorer_node = frontier_explorer.explorer_node:main`.
 
-**Install rule:** `drone_bringup/setup.py` installs only top-level `config/*` files plus explicitly listed subdirectories. Add a `data_files` entry for `config/exploration/*`. On `wp-d-planner` the same omission means `config/planning/ego_v2.yaml` is never installed (OI-11); fix it on the combined branch.
+**Install rule:** `drone_bringup/setup.py` installs only top-level `config/*` files plus explicitly listed subdirectories. Add a `data_files` entry for `config/exploration/*`. On `wp-d-planner` the same omission means `config/planning/ego_v2.yaml` is never installed (OI-11); fix it on `wp-d-planner`.
 
 ## 13. Test plan
 
@@ -785,7 +785,7 @@ Scenarios with a "reveal" use an open-loop script: the fixture holds the true ba
 ## 16. Open items
 | ID | Item | Owner | Due |
 |---|---|---|---|
-| OI-1 | Build-precondition deviation: branch from `wp-d` + `wp-c` merge before `map_interface` reaches `main` | Operator ack | Before branch creation |
+| OI-1 | **Resolved 2026-09-13: deviation declined.** No WP-F implementation until `map_interface` is merged to `main` after the `gate5_as2_behaviors` token; `wp-f-frontier` is then created from `main` | Operator | Done |
 | OI-2 | Planning box, map bounds and geofence defaults are mutually inconsistent (C4 fails today) | Operator: size for the venue | Before Gate 7 |
 | OI-3 | Shim has no structured goal status; rejection detected by string prefix | Future WP-D change (not this WP) | Before Gate 7 |
 | OI-4 | Consumer of `/go_to_with_avoidance/hover_request` unverified (shared with VD-006) | Gate 6 integration | Gate 6 |
@@ -795,12 +795,12 @@ Scenarios with a "reveal" use an open-loop script: the fixture holds the true ba
 | OI-8 | PR-2 budget set from synthetic measurements | VD-008 | Gate 6 |
 | OI-9 | Transparent obstacles (glass) undetectable; single-box geofence cannot exclude regions | Operator: venue survey | Before Gate 7 |
 | OI-10 | `PlatformInfo.offboard` semantics with `as2_platform_pixhawk` (I2, P2) | [VERIFY] | Gate 5 |
-| OI-11 | `wp-d-planner` `drone_bringup/setup.py` does not install `config/planning/` (`ego_v2.yaml`) | Fix on `wp-f-frontier` merge (or on `wp-d`) | Branch creation |
+| OI-11 | `wp-d-planner` `drone_bringup/setup.py` does not install `config/planning/` (`ego_v2.yaml`) | Fix on `wp-d-planner` | Before `wp-d` merges to `main` |
 
 ## 17. Implementation plan (Step → Verify → Check)
 | # | Step | Verify | Check |
 |---|---|---|---|
-| 1 | Create `wp-f-frontier` (OI-1 ack), union-merge docs, fix OI-11 | `colcon build --parallel-workers 2` (`MAKEFLAGS=-j4`) of `map_interface`, `planner_shim`, `drone_bringup` | Existing WP-C/WP-D tests still pass; `ego_v2.yaml` installed |
+| 1 | After `map_interface` and `planner_shim` reach `main` (OI-1), create `wp-f-frontier` from `main` | `colcon build --parallel-workers 2` (`MAKEFLAGS=-j4`) of `map_interface`, `planner_shim`, `drone_bringup` | Existing WP-C/WP-D tests still pass; `ego_v2.yaml` installed (OI-11 fixed on `wp-d-planner`) |
 | 2 | `config.py` + T-C* | pytest | C4 fails on today's defaults (OI-2 reproduced) |
 | 3 | `grid.py` + T-G* | pytest | 46×46 at defaults; exact-arithmetic sweep passes |
 | 4 | `frontier.py` + T-F* | pytest | S-04, S-05, S-08 frontier-level |
