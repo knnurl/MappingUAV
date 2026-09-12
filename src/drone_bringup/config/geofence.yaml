@@ -2,6 +2,11 @@
 # Geofence watchdog parameters. Box is in the PX4 local NED frame (z DOWN):
 # a 2.5 m ceiling is z_min: -2.5. Defaults sized for the Gate 4 tethered test
 # volume (>= 3 x 3 x 2.5 m); RESIZE for the actual room before Gate 5.
+# AXES: the NED origin and axes are fixed where/how FAST-LIO starts, not by the
+# compass. px4_odom_bridge maps the vehicle's STARTUP forward direction to +y
+# (East) and its startup LEFT to +x (North). Size y along the startup-forward
+# extent of the room and x along the startup-left extent, and always start LIO
+# at the same pose and heading or the box lands somewhere else in the room.
 geofence_watchdog:
   ros__parameters:
     x_min: -1.5
