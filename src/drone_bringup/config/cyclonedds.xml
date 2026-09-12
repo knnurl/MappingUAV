@@ -4,10 +4,15 @@
   <Domain Id="any">
     <General>
       <!-- Bind to loopback + the wifi interface used by the ground station.
-           Verified against `ip link` on this Jetson: wlP1p1s0 (not wlan0). -->
+           Verified against `ip link` on this Jetson: wlP1p1s0 (not wlan0).
+           WiFi is the ground link [operator decision 2026-09-13]. It is
+           presence_required="false" so ROS still starts on loopback when the
+           radio is off or down; a required-but-missing interface makes every
+           node fail with "rmw handle is invalid". Ethernet is deliberately not
+           listed: its port is reserved for the Mid-360 LiDAR. -->
       <Interfaces>
         <NetworkInterface name="lo"/>
-        <NetworkInterface name="wlP1p1s0"/>
+        <NetworkInterface name="wlP1p1s0" presence_required="false"/>
       </Interfaces>
       <MaxMessageSize>65500B</MaxMessageSize>
     </General>
