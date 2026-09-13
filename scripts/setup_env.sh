@@ -62,14 +62,14 @@ cat >> ~/.bashrc <<'EOF'
 # --- drone stack environment ---
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file://$HOME/colcon_ws/src/drone_bringup/config/cyclonedds.xml
-export ROS_DOMAIN_ID=42
+export ROS_DOMAIN_ID=0   # = PX4 UXRCE_DDS_DOM_ID default
 export MAKEFLAGS="-j4"
 source /opt/ros/humble/setup.bash
 [ -f $HOME/colcon_ws/install/setup.bash ] && source $HOME/colcon_ws/install/setup.bash
 EOF
 fi
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-export ROS_DOMAIN_ID=42
+export ROS_DOMAIN_ID=0   # = PX4 UXRCE_DDS_DOM_ID default
 export MAKEFLAGS="-j4"
 
 # ---------------------------------------------------------------------------

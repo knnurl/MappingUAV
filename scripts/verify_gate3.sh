@@ -11,8 +11,8 @@ timeout 15 ros2 topic hz /fmu/in/vehicle_visual_odometry   # expect ~10 Hz
 echo "--- sole EV writer (expect 'Publisher count: 1', node px4_odom_bridge) ---"
 ros2 topic info -v /fmu/in/vehicle_visual_odometry
 
-echo "--- PX4 estimator output (BEST_EFFORT QoS via CLI) ---"
-timeout 15 ros2 topic hz /fmu/out/vehicle_odometry
+echo "--- PX4 estimator output (BEST_EFFORT: ros2 topic hz cannot subscribe to it, use the probe) ---"
+python3 "$(dirname "$0")/fmu_rate_probe.py" --duration 15 /fmu/out/vehicle_odometry   # expect ~100 Hz
 ros2 topic echo /fmu/out/vehicle_odometry --once
 
 cat <<'EOF'
