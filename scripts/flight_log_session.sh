@@ -34,7 +34,7 @@ source "$HOME/colcon_ws/install/setup.bash"
 set -u
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI="file://$HOME/colcon_ws/src/drone_bringup/config/cyclonedds.xml"
-export ROS_DOMAIN_ID=42
+export ROS_DOMAIN_ID=0   # = PX4 UXRCE_DDS_DOM_ID default
 
 session="$SESSION_ROOT/session_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$SESSION_ROOT"
