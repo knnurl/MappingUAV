@@ -1,0 +1,36 @@
+# filepath: test_data/manifest.yaml
+# Bench recordings for replay tests (masterplan §5). Bags live next to this file and are
+# git-ignored; only this manifest is tracked.
+# Record with scripts/record_bench_bag.sh <gate2|gate3> <label>; paste the entry it prints.
+# Consumers: WP-C map_interface replay harness (VD-002), frontier_explorer benchmarks
+# (VD-008), Gate 3 EKF2_EV_DELAY and timesync analysis.
+#
+# Entry format:
+#   - id: 2026-09-20_gate2_walk
+#     gate: gate2
+#     path: test_data/2026-09-20_gate2_walk
+#     started: 2026-09-20T14:02:11+01:00
+#     stopped: 2026-09-20T14:10:40+01:00
+#     size: 1.1G
+#     topics: [/livox/lidar,/livox/imu,/Odometry,/cloud_registered,/tf,/tf_static]
+#     description: "hand-carry loop, return to mark, 5 min stationary"
+#     notes: ""
+bags:
+  - id: 2026-09-14_gate2_walk
+    gate: gate2
+    path: test_data/2026-09-14_gate2_walk
+    started: 2026-09-14T17:30:33+01:00
+    stopped: 2026-09-14T17:30:57+01:00
+    size: 96M
+    topics: [/livox/lidar,/livox/imu,/Odometry,/cloud_registered,/tf,/tf_static]
+    description: "short hand carry, ~0.7 m out and back; NOT the gate2 walk loop"
+    notes: "recorder shake-out. 229 odometry msgs / 22.8 s, path 4.64 m, pick-up to set-down 7 mm. Recorded against a LIO origin that already carried a ~7.5 cm offset from people moving near the sensor; the gate2 walk loop is still to be recorded from a fresh origin."
+  - id: 2026-09-14_gate2_walk_loop
+    gate: gate2
+    path: test_data/2026-09-14_gate2_walk_loop
+    started: 2026-09-14T17:49:54+01:00
+    stopped: 2026-09-14T17:57:21+01:00
+    size: 1.9G
+    topics: [/livox/lidar,/livox/imu,/Odometry,/cloud_registered,/tf,/tf_static]
+    description: "gate2 carry test: 49 s hand carry, max 1.36 m from the mark, then ~5 min stationary"
+    notes: "NOT the specified ~2 min room loop; deferred until the cabling is reworked. Return to start 4.8 cm horizontal (reference was itself 5.5 cm off zero: post-init settling), z drift +0.001 cm/min over 312 s, /Odometry 10.00 Hz while recording. Bag duration 446.842309220s."

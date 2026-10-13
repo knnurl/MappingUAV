@@ -6,7 +6,9 @@ set -e
 source ~/colcon_ws/install/setup.bash
 
 echo "--- bridge node alive and publishing ---"
-timeout 15 ros2 topic hz /fmu/in/vehicle_visual_odometry   # expect ~10 Hz
+# The bridge publishes RELIABLE, so hz works; `| tail || true` stops `timeout`'s
+# exit 124 from aborting the script under `set -e`.
+timeout 15 ros2 topic hz /fmu/in/vehicle_visual_odometry 2>/dev/null | tail -4 || true   # expect ~10 Hz
 
 echo "--- sole EV writer (expect 'Publisher count: 1', node px4_odom_bridge) ---"
 ros2 topic info -v /fmu/in/vehicle_visual_odometry

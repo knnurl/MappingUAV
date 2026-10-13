@@ -38,14 +38,18 @@ def generate_launch_description():
     )
 
     # base_link (FLU, flight controller position) -> livox_frame.
-    # [MEASURE]: replace x y z roll pitch yaw with the physical lidar mount offset
-    # relative to the Pixhawk 6C IMU on the X500. Placeholder 9.99 values force
-    # an obvious failure in RViz rather than a silently-wrong extrinsic.
+    # [MEASURED 2026-09-14, operator]: the Mid-360 centre sits ~85 mm above the
+    # Pixhawk 6C, horizontally inline, so (0, 0, +0.085) m in FLU.
+    # Visualisation only: the estimation path does not use this TF (see the note
+    # at the top). Before it is used for EKF2, refine it for the sensor's own
+    # internal offset: FAST-LIO's body frame is the Mid-360's built-in IMU, not
+    # the LiDAR centre (fast_lio_mid360_x500.yaml extrinsic_T), and EKF2's
+    # EKF2_EV_POS_X/Y/Z (FRD, so z = -0.085) are still 0 on the FC.
     tf_base_to_livox = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name='tf_base_link_to_livox',
-        arguments=['--x', '9.99', '--y', '9.99', '--z', '9.99',
+        arguments=['--x', '0', '--y', '0', '--z', '0.085',
                    '--roll', '0', '--pitch', '0', '--yaw', '0',
                    '--frame-id', 'base_link',
                    '--child-frame-id', 'livox_frame'],
