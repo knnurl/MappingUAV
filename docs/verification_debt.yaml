@@ -15,3 +15,9 @@ debts:
     original_criterion: "platform [VERIFY] against our px4_msgs branch"
     discharge_path: "gate5 bench session with FC powered: verify platform sees /fmu/out topics and offboard handshake works before any arming"
     status: OPEN
+  - id: VD-010
+    package: wp-b
+    claim_untested: "PX4 closed-loop response to deploy/patches/as2_platform_pixhawk_offboard_hold.patch: Offboard entered from a POSITION hover holds position and yaw, level; entered on the ground stays at idle with no takeoff; no /fmu/in setpoint reaches PX4 outside Offboard, so POSITION, Land and failsafes are not disturbed. Verified only against a fake PX4 (tests/offboard_node_gtest.cpp, which fails on the unpatched platform) and against PX4 v1.15.0 source."
+    original_criterion: "level, safe, predictable handover from a POSITION hover to Offboard (operator requirement 2026-09-14)"
+    discharge_path: "gate5 runbook C4-C5 (props off) and D0 a-c (props on, tethered): RC switch and service entries from a POSITION hover, re-entry, ground entry; review the .ulg attitude and local position around every switch"
+    status: OPEN

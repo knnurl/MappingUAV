@@ -1,0 +1,1499 @@
+# filepath: deploy/patches/as2_platform_pixhawk_offboard_hold.patch
+# Offboard hold policy for as2_platform_pixhawk 482563b (see include/as2_platform_pixhawk/offboard_guard.hpp).
+# Apply AFTER as2_platform_pixhawk_px4msgs_1.15.patch, from the package root: git apply <this file>
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 9883f2a..aa116e7 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -44,6 +44,7 @@ include_directories(
+ # Set source files
+ set(SOURCE_CPP_FILES
+   src/pixhawk_platform.cpp
++  src/offboard_guard.cpp
+ )
+ 
+ # Create the node executable
+diff --git a/include/as2_platform_pixhawk/offboard_guard.hpp b/include/as2_platform_pixhawk/offboard_guard.hpp
+new file mode 100644
+index 0000000..fb15dfb
+--- /dev/null
++++ b/include/as2_platform_pixhawk/offboard_guard.hpp
+@@ -0,0 +1,143 @@
++// filepath: src/as2_platform_pixhawk/include/as2_platform_pixhawk/offboard_guard.hpp
++// Copyright 2026 Kaan Ural
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions are met:
++//
++//    * Redistributions of source code must retain the above copyright
++//      notice, this list of conditions and the following disclaimer.
++//
++//    * Redistributions in binary form must reproduce the above copyright
++//      notice, this list of conditions and the following disclaimer in the
++//      documentation and/or other materials provided with the distribution.
++//
++//    * Neither the name of the copyright holder nor the names of its
++//      contributors may be used to endorse or promote products derived from
++//      this software without specific prior written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
++// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++// POSSIBILITY OF SUCH DAMAGE.
++
++/**
++ * @file offboard_guard.hpp
++ *
++ * Offboard entry and exit policy for the PX4 platform, free of ROS so every
++ * rule is unit tested (tests/offboard_guard_gtest.cpp). Checked against PX4
++ * v1.15.0 source.
++ *
++ *  A. Outside Offboard only the offboard_control_mode heartbeat is sent, never
++ *     a setpoint. PX4's uXRCE-DDS client publishes /fmu/in setpoints straight
++ *     into the controllers' uORB topics in every flight mode
++ *     (uxrce_dds_client/dds_topics.h.em), so a setpoint sent outside Offboard
++ *     is mixed into POSITION, Land or any other mode. The heartbeat is sent
++ *     only while PX4 odometry, the EKF in-air flag and the PX4 control mode are
++ *     fresh; otherwise PX4 cannot enter Offboard.
++ *  B. Every Offboard entry starts with a hold. In the air: the position and
++ *     yaw captured at entry, re-captured after an estimator reset. On the
++ *     ground: zero velocity and no position, which cannot trigger PX4's
++ *     offboard takeoff (mc_pos_control/MulticopterPositionControl.cpp).
++ *  C. AS2 commands are forwarded only when a control mode was set after the
++ *     AS2 offboard request, or after an entry AS2 did not request.
++ *  D. After any Offboard exit or disarm, AS2 commands are never forwarded again
++ *     by this process: restart the platform node.
++ *
++ * Times are seconds on a monotonic clock, taken when each message arrives.
++ */
++
++#ifndef AS2_PLATFORM_PIXHAWK__OFFBOARD_GUARD_HPP_
++#define AS2_PLATFORM_PIXHAWK__OFFBOARD_GUARD_HPP_
++
++#include <cstdint>
++#include <limits>
++
++namespace as2_platform_pixhawk
++{
++
++struct OffboardGuardConfig
++{
++  double odometry_timeout_s = 0.2;      // vehicle_odometry arrives at ~100 Hz
++  double in_air_timeout_s = 3.0;        // estimator_status_flags: ~1 Hz and on change
++  double control_mode_timeout_s = 1.5;  // vehicle_control_mode: >= 2 Hz and on change
++  double request_window_s = 2.0;        // entry this soon after an AS2 request is AS2's
++};
++
++class OffboardGuard
++{
++public:
++  static constexpr double kNan = std::numeric_limits<double>::quiet_NaN();
++
++  enum class Action
++  {
++    kNone,        // publish nothing
++    kHeartbeat,   // offboard_control_mode only
++    kHoldAir,     // position and yaw hold at x, y, z, yaw (PX4 local NED)
++    kHoldGround,  // zero velocity, no position
++    kForward      // AS2 commands
++  };
++
++  struct Decision
++  {
++    Action action = Action::kNone;
++    double x = kNan;
++    double y = kNan;
++    double z = kNan;
++    double yaw = kNan;
++    const char * reason = "";
++  };
++
++  explicit OffboardGuard(const OffboardGuardConfig & config = OffboardGuardConfig());
++
++  void onOdometry(double t, double x, double y, double z, double yaw, uint8_t reset_counter);
++  void onInAir(double t, bool in_air);
++  void onControlMode(double t, bool offboard, bool armed);
++  void onOffboardRequested(double t);
++  void onControlModeSet(double t);
++  void disableForwarding();
++
++  bool heartbeatAllowed(double now, const char ** reason = nullptr) const;
++  Decision decide(double now, bool mode_settled);
++  bool forwardingDisabled() const {return forwarding_disabled_;}
++
++private:
++  OffboardGuardConfig config_;
++
++  double odometry_t_ = kNan;
++  double odom_x_ = kNan;
++  double odom_y_ = kNan;
++  double odom_z_ = kNan;
++  double odom_yaw_ = kNan;
++  uint8_t odom_reset_counter_ = 0;
++
++  double in_air_t_ = kNan;
++  bool in_air_ = false;
++
++  double control_mode_t_ = kNan;
++  bool have_control_mode_ = false;
++  bool px4_offboard_ = false;
++  bool px4_armed_ = false;
++
++  double request_t_ = kNan;
++  double mode_set_t_ = kNan;
++  double permission_epoch_ = -std::numeric_limits<double>::infinity();
++  bool forwarding_disabled_ = false;
++
++  bool hold_latched_ = false;
++  double hold_x_ = kNan;
++  double hold_y_ = kNan;
++  double hold_z_ = kNan;
++  double hold_yaw_ = kNan;
++  uint8_t hold_reset_counter_ = 0;
++};
++
++}  // namespace as2_platform_pixhawk
++
++#endif  // AS2_PLATFORM_PIXHAWK__OFFBOARD_GUARD_HPP_
+diff --git a/include/as2_platform_pixhawk/pixhawk_platform.hpp b/include/as2_platform_pixhawk/pixhawk_platform.hpp
+index 3aa840a..a63d0aa 100644
+--- a/include/as2_platform_pixhawk/pixhawk_platform.hpp
++++ b/include/as2_platform_pixhawk/pixhawk_platform.hpp
+@@ -42,10 +42,12 @@
+ 
+ #include <chrono>
+ #include <cmath>
++#include <limits>
+ #include <memory>
+ #include <string>
+ 
+ #include <px4_msgs/msg/battery_status.hpp>
++#include <px4_msgs/msg/estimator_status_flags.hpp>
+ #include <px4_msgs/msg/manual_control_switches.hpp>
+ #include <px4_msgs/msg/offboard_control_mode.hpp>
+ #include <px4_msgs/msg/sensor_combined.hpp>
+@@ -74,6 +76,7 @@
+ #include "as2_core/utils/tf_utils.hpp"
+ #include "as2_msgs/msg/control_mode.hpp"
+ #include "as2_msgs/msg/thrust.hpp"
++#include "offboard_guard.hpp"
+ 
+ namespace as2_platform_pixhawk
+ {
+@@ -124,6 +127,8 @@ private:
+   rclcpp::Subscription<px4_msgs::msg::TimesyncStatus>::SharedPtr px4_timesync_sub_;
+   rclcpp::Subscription<px4_msgs::msg::BatteryStatus>::SharedPtr px4_battery_sub_;
+   rclcpp::Subscription<px4_msgs::msg::SensorGps>::SharedPtr px4_gps_sub_;
++  rclcpp::Subscription<px4_msgs::msg::EstimatorStatusFlags>::SharedPtr
++    px4_estimator_status_flags_sub_;
+ 
+   // PX4 publishers
+   rclcpp::Publisher<px4_msgs::msg::ManualControlSwitches>::SharedPtr
+@@ -145,9 +150,16 @@ private:
+   void PX4publishRatesSetpoint();
+   void PX4publishVehicleCommand(uint16_t command, float param1 = 0.0, float param2 = 0.0);
+   void PX4publishVisualOdometry();
++  void PX4publishOffboardHeartbeat();
++  void PX4publishHoldSetpoint(const OffboardGuard::Decision & decision);
++  void logOffboardAction(const OffboardGuard::Decision & decision);
+ 
+ private:
+-  bool manual_from_operator_ = false;
++  // Offboard entry/exit policy, see offboard_guard.hpp
++  OffboardGuard offboard_guard_;
++  OffboardGuard::Action last_offboard_action_ = OffboardGuard::Action::kNone;
++  bool offboard_action_logged_ = false;
++  rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
+   bool set_disarm_ = false;
+   nav_msgs::msg::Odometry odometry_msg_;
+ 
+@@ -179,6 +191,8 @@ private:
+   void px4VehicleControlModeCallback(const px4_msgs::msg::VehicleControlMode::SharedPtr msg);
+   void px4BatteryCallback(const px4_msgs::msg::BatteryStatus::SharedPtr msg);
+   void px4GpsCallback(const px4_msgs::msg::SensorGps::SharedPtr msg);
++  void px4EstimatorStatusFlagsCallback(
++    const px4_msgs::msg::EstimatorStatusFlags::SharedPtr msg);
+ };
+ 
+ }  // namespace as2_platform_pixhawk
+diff --git a/src/offboard_guard.cpp b/src/offboard_guard.cpp
+new file mode 100644
+index 0000000..47d06e7
+--- /dev/null
++++ b/src/offboard_guard.cpp
+@@ -0,0 +1,172 @@
++// filepath: src/as2_platform_pixhawk/src/offboard_guard.cpp
++// Copyright 2026 Kaan Ural
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions are met:
++//
++//    * Redistributions of source code must retain the above copyright
++//      notice, this list of conditions and the following disclaimer.
++//
++//    * Redistributions in binary form must reproduce the above copyright
++//      notice, this list of conditions and the following disclaimer in the
++//      documentation and/or other materials provided with the distribution.
++//
++//    * Neither the name of the copyright holder nor the names of its
++//      contributors may be used to endorse or promote products derived from
++//      this software without specific prior written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
++// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++// POSSIBILITY OF SUCH DAMAGE.
++
++/**
++ * @file offboard_guard.cpp
++ *
++ * OffboardGuard implementation. The rules are documented in offboard_guard.hpp.
++ */
++
++#include "offboard_guard.hpp"
++
++#include <cmath>
++
++namespace as2_platform_pixhawk
++{
++
++OffboardGuard::OffboardGuard(const OffboardGuardConfig & config)
++: config_(config)
++{
++}
++
++void OffboardGuard::onOdometry(
++  double t, double x, double y, double z, double yaw, uint8_t reset_counter)
++{
++  if (!(std::isfinite(x) && std::isfinite(y) && std::isfinite(z) && std::isfinite(yaw))) {
++    odometry_t_ = kNan;  // an unusable sample counts as no odometry
++    return;
++  }
++  odometry_t_ = t;
++  odom_x_ = x;
++  odom_y_ = y;
++  odom_z_ = z;
++  odom_yaw_ = yaw;
++  odom_reset_counter_ = reset_counter;
++}
++
++void OffboardGuard::onInAir(double t, bool in_air)
++{
++  in_air_t_ = t;
++  in_air_ = in_air;
++}
++
++void OffboardGuard::onControlMode(double t, bool offboard, bool armed)
++{
++  if (!have_control_mode_) {
++    if (offboard) {  // already in Offboard when this process started: not AS2's entry
++      permission_epoch_ = t;
++      hold_latched_ = false;
++    }
++  } else {
++    if (offboard && !px4_offboard_) {  // entry
++      const double since_request = t - request_t_;  // NaN without a request
++      const bool requested = since_request >= 0.0 && since_request <= config_.request_window_s;
++      if (!requested) {
++        permission_epoch_ = t;
++      }
++      hold_latched_ = false;
++    } else if (!offboard && px4_offboard_) {  // exit
++      forwarding_disabled_ = true;
++      hold_latched_ = false;
++    }
++    if (px4_armed_ && !armed) {  // disarm
++      forwarding_disabled_ = true;
++    }
++  }
++  have_control_mode_ = true;
++  control_mode_t_ = t;
++  px4_offboard_ = offboard;
++  px4_armed_ = armed;
++}
++
++void OffboardGuard::onOffboardRequested(double t)
++{
++  request_t_ = t;
++  permission_epoch_ = t;
++}
++
++void OffboardGuard::onControlModeSet(double t)
++{
++  mode_set_t_ = t;
++}
++
++void OffboardGuard::disableForwarding()
++{
++  forwarding_disabled_ = true;
++}
++
++bool OffboardGuard::heartbeatAllowed(double now, const char ** reason) const
++{
++  const char * why = nullptr;
++  // Negated comparisons so that a missing (NaN) time also fails.
++  if (!(now - odometry_t_ <= config_.odometry_timeout_s)) {
++    why = "PX4 odometry missing, stale or invalid";
++  } else if (!(now - in_air_t_ <= config_.in_air_timeout_s)) {
++    why = "EKF in-air flag missing or stale";
++  } else if (!(now - control_mode_t_ <= config_.control_mode_timeout_s)) {
++    why = "PX4 control mode missing or stale";
++  }
++  if (reason != nullptr) {
++    *reason = (why != nullptr) ? why : "";
++  }
++  return why == nullptr;
++}
++
++OffboardGuard::Decision OffboardGuard::decide(double now, bool mode_settled)
++{
++  Decision decision;
++  if (!heartbeatAllowed(now, &decision.reason)) {
++    decision.action = Action::kNone;
++    return decision;
++  }
++  if (!px4_offboard_) {
++    decision.action = Action::kHeartbeat;
++    return decision;
++  }
++
++  const bool mode_is_current = mode_set_t_ > permission_epoch_;  // false while NaN
++  if (mode_settled && mode_is_current && !forwarding_disabled_) {
++    hold_latched_ = false;  // a later hold starts where the vehicle is then
++    decision.action = Action::kForward;
++    return decision;
++  }
++
++  if (!in_air_) {
++    hold_latched_ = false;
++    decision.action = Action::kHoldGround;
++    return decision;
++  }
++
++  if (!hold_latched_ || odom_reset_counter_ != hold_reset_counter_) {
++    hold_x_ = odom_x_;
++    hold_y_ = odom_y_;
++    hold_z_ = odom_z_;
++    hold_yaw_ = odom_yaw_;
++    hold_reset_counter_ = odom_reset_counter_;
++    hold_latched_ = true;
++  }
++  decision.action = Action::kHoldAir;
++  decision.x = hold_x_;
++  decision.y = hold_y_;
++  decision.z = hold_z_;
++  decision.yaw = hold_yaw_;
++  return decision;
++}
++
++}  // namespace as2_platform_pixhawk
+diff --git a/src/pixhawk_platform.cpp b/src/pixhawk_platform.cpp
+index d94a29f..529b461 100644
+--- a/src/pixhawk_platform.cpp
++++ b/src/pixhawk_platform.cpp
+@@ -106,6 +106,13 @@ PixhawkPlatform::PixhawkPlatform(const rclcpp::NodeOptions & options)
+   px4_odometry_sub_ = this->create_subscription<px4_msgs::msg::VehicleOdometry>(
+     fmu_prefix + "/fmu/out/vehicle_odometry", rclcpp::SensorDataQoS(),
+     std::bind(&PixhawkPlatform::px4odometryCallback, this, std::placeholders::_1));
++
++  // EKF in-air flag for the offboard hold (offboard_guard.hpp)
++  px4_estimator_status_flags_sub_ =
++    this->create_subscription<px4_msgs::msg::EstimatorStatusFlags>(
++    fmu_prefix + "/fmu/out/estimator_status_flags", rclcpp::SensorDataQoS(),
++    std::bind(
++      &PixhawkPlatform::px4EstimatorStatusFlagsCallback, this, std::placeholders::_1));
+   tf_handler_ = std::make_shared<as2::tf::TfHandler>(this);
+ 
+   if (external_odom_) {
+@@ -162,9 +169,6 @@ bool PixhawkPlatform::ownSetArmingState(bool state)
+ 
+ bool PixhawkPlatform::ownSetOffboardControl(bool offboard)
+ {
+-  // TODO(miferco97): CREATE A DEFAULT CONTROL MODE FOR BEING ABLE TO SWITCH TO OFFBOARD
+-  // MODE BEFORE RUNNING THE CONTROLLER
+-
+   if (offboard == false) {
+     RCLCPP_ERROR(
+       this->get_logger(),
+@@ -172,17 +176,17 @@ bool PixhawkPlatform::ownSetOffboardControl(bool offboard)
+     return false;
+   }
+ 
+-  px4_offboard_control_mode_ = px4_msgs::msg::OffboardControlMode();  // RESET CONTROL MODE
+-  px4_offboard_control_mode_.body_rate = true;
+-  resetRatesSetpoint();
++  // No setpoints are pre-streamed: sendCommand() already sends the offboard
++  // heartbeat, and every entry starts with a hold (offboard_guard.hpp).
++  const double now = steady_clock_.now().seconds();
++  offboard_guard_.onOffboardRequested(now);
++  const char * reason = "";
++  if (!offboard_guard_.heartbeatAllowed(now, &reason)) {
++    RCLCPP_ERROR(this->get_logger(), "Offboard request refused: %s", reason);
++    return false;
++  }
+ 
+   RCLCPP_DEBUG(this->get_logger(), "Switching to OFFBOARD mode");
+-  // Following PX4 offboard guidelines
+-  rclcpp::Rate r(100);
+-  for (int i = 0; i < 10; i++) {
+-    PX4publishRatesSetpoint();
+-    r.sleep();
+-  }
+   PX4publishOffboardControlMode();
+   return true;
+ }
+@@ -228,6 +232,7 @@ bool PixhawkPlatform::ownSetPlatformControlMode(const as2_msgs::msg::ControlMode
+   }
+ 
+   has_mode_settled_ = true;
++  offboard_guard_.onControlModeSet(steady_clock_.now().seconds());
+   return true;
+ }
+ 
+@@ -245,26 +250,38 @@ float yawEnuToAircraft(geometry_msgs::msg::PoseStamped command_pose_msg)
+ 
+ void PixhawkPlatform::sendCommand()
+ {
+-  // Actuator commands are published continously
++  // Runs at cmd_freq. offboard_guard_ decides what is sent; offboard_guard.hpp
++  // documents the rules and the PX4 behaviour behind them.
++  const double now = steady_clock_.now().seconds();
++  OffboardGuard::Decision decision = offboard_guard_.decide(now, has_mode_settled_);
+ 
+-  if (!getArmingState()) {
+-    return;
++  if (decision.action == OffboardGuard::Action::kForward && !ownSendCommand()) {
++    RCLCPP_ERROR(
++      this->get_logger(),
++      "Could not send the AS2 command; holding until the platform node is restarted");
++    offboard_guard_.disableForwarding();
++    decision = offboard_guard_.decide(now, has_mode_settled_);
+   }
+ 
+-  if ((!getOffboardMode() || !has_mode_settled_) && !manual_from_operator_) {
+-    px4_offboard_control_mode_ = px4_msgs::msg::OffboardControlMode();  // RESET CONTROL MODE
+-    px4_offboard_control_mode_.body_rate = true;
+-
+-    resetRatesSetpoint();
+-    px4_rates_setpoint_.thrust_body[2] = -1.0 * min_thrust_;
+-
+-    // RCLCPP_INFO(this->get_logger(), "SendCommand - Offboard Mode - Publish Rates Setpoint");
+-    PX4publishRatesSetpoint();
+-    return;
++  if (!offboard_action_logged_ || decision.action != last_offboard_action_) {
++    logOffboardAction(decision);
++    last_offboard_action_ = decision.action;
++    offboard_action_logged_ = true;
+   }
+ 
+-  ownSendCommand();
+-  return;
++  switch (decision.action) {
++    case OffboardGuard::Action::kHeartbeat:
++      PX4publishOffboardHeartbeat();
++      break;
++    case OffboardGuard::Action::kHoldAir:
++    case OffboardGuard::Action::kHoldGround:
++      PX4publishHoldSetpoint(decision);
++      break;
++    case OffboardGuard::Action::kNone:
++    case OffboardGuard::Action::kForward:  // already sent by ownSendCommand()
++    default:
++      break;
++  }
+ }
+ 
+ bool PixhawkPlatform::ownSendCommand()
+@@ -535,6 +552,71 @@ void PixhawkPlatform::PX4publishRatesSetpoint()
+   px4_offboard_control_mode_pub_->publish(px4_offboard_control_mode_);
+ }
+ 
++/**
++ * @brief Publish the offboard heartbeat alone. The position flag makes PX4
++ * accept Offboard only with a valid local position.
++ */
++void PixhawkPlatform::PX4publishOffboardHeartbeat()
++{
++  px4_msgs::msg::OffboardControlMode heartbeat{};
++  heartbeat.position = true;
++  heartbeat.timestamp = this->get_clock()->now().nanoseconds() / 1000;
++  px4_offboard_control_mode_pub_->publish(heartbeat);
++}
++
++/**
++ * @brief Publish a hold setpoint and the heartbeat. In the air: position and
++ * yaw hold. On the ground: zero velocity and no position, which PX4 does not
++ * treat as a takeoff request.
++ */
++void PixhawkPlatform::PX4publishHoldSetpoint(const OffboardGuard::Decision & decision)
++{
++  const float nan = std::numeric_limits<float>::quiet_NaN();
++  px4_msgs::msg::TrajectorySetpoint setpoint{};
++  setpoint.position = {nan, nan, nan};
++  setpoint.velocity = {nan, nan, nan};
++  setpoint.acceleration = {nan, nan, nan};
++  setpoint.jerk = {nan, nan, nan};
++  setpoint.yaw = nan;
++  setpoint.yawspeed = nan;
++
++  if (decision.action == OffboardGuard::Action::kHoldAir) {
++    setpoint.position = {
++      static_cast<float>(decision.x), static_cast<float>(decision.y),
++      static_cast<float>(decision.z)};
++    setpoint.yaw = static_cast<float>(decision.yaw);
++  } else {
++    setpoint.velocity = {0.0f, 0.0f, 0.0f};
++  }
++
++  setpoint.timestamp = this->get_clock()->now().nanoseconds() / 1000;
++  px4_trajectory_setpoint_pub_->publish(setpoint);
++  PX4publishOffboardHeartbeat();
++}
++
++void PixhawkPlatform::logOffboardAction(const OffboardGuard::Decision & decision)
++{
++  switch (decision.action) {
++    case OffboardGuard::Action::kNone:
++      RCLCPP_WARN(this->get_logger(), "No offboard heartbeat: %s", decision.reason);
++      break;
++    case OffboardGuard::Action::kHeartbeat:
++      RCLCPP_INFO(this->get_logger(), "Offboard heartbeat only: PX4 is not in Offboard");
++      break;
++    case OffboardGuard::Action::kHoldAir:
++      RCLCPP_WARN(
++        this->get_logger(), "OFFBOARD HOLD in the air at NED %.2f %.2f %.2f, yaw %.2f rad",
++        decision.x, decision.y, decision.z, decision.yaw);
++      break;
++    case OffboardGuard::Action::kHoldGround:
++      RCLCPP_WARN(this->get_logger(), "OFFBOARD HOLD on the ground: zero velocity, no takeoff");
++      break;
++    case OffboardGuard::Action::kForward:
++      RCLCPP_INFO(this->get_logger(), "Forwarding AS2 commands to PX4");
++      break;
++  }
++}
++
+ /**
+  * @brief Publish vehicle commands
+  * @param command   Command code (matches VehicleCommand and MAVLink MAV_CMD
+@@ -724,6 +806,20 @@ void PixhawkPlatform::px4odometryCallback(const px4_msgs::msg::VehicleOdometry::
+   odom_msg.twist.twist.angular.z = -msg->angular_velocity[2];
+ 
+   odometry_raw_estimation_ptr_->updateData(odom_msg);
++
++  // Hold point for offboard_guard_: PX4 local NED position and yaw
++  if (msg->pose_frame == px4_msgs::msg::VehicleOdometry::POSE_FRAME_NED ||
++    msg->pose_frame == px4_msgs::msg::VehicleOdometry::POSE_FRAME_FRD)
++  {
++    const double qw = msg->q[0];
++    const double qx = msg->q[1];
++    const double qy = msg->q[2];
++    const double qz = msg->q[3];
++    const double yaw = std::atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz));
++    offboard_guard_.onOdometry(
++      steady_clock_.now().seconds(), msg->position[0], msg->position[1], msg->position[2],
++      yaw, msg->reset_counter);
++  }
+ }
+ 
+ void PixhawkPlatform::px4VehicleControlModeCallback(
+@@ -732,6 +828,15 @@ void PixhawkPlatform::px4VehicleControlModeCallback(
+   static bool last_arm_state = false;
+   static bool last_offboard_state = false;
+ 
++  const bool forwarding_was_disabled = offboard_guard_.forwardingDisabled();
++  offboard_guard_.onControlMode(
++    steady_clock_.now().seconds(), msg->flag_control_offboard_enabled, msg->flag_armed);
++  if (!forwarding_was_disabled && offboard_guard_.forwardingDisabled()) {
++    RCLCPP_WARN(
++      this->get_logger(),
++      "Offboard exit or disarm: AS2 commands disabled until the platform node is restarted");
++  }
++
+   this->platform_info_msg_.armed = msg->flag_armed;
+   this->platform_info_msg_.offboard = msg->flag_control_offboard_enabled;
+ 
+@@ -740,7 +845,6 @@ void PixhawkPlatform::px4VehicleControlModeCallback(
+       RCLCPP_INFO(this->get_logger(), "OFFBOARD_ENABLED");
+     } else {
+       RCLCPP_INFO(this->get_logger(), "OFFBOARD_DISABLED");
+-      manual_from_operator_ = true;
+     }
+     last_offboard_state = this->platform_info_msg_.offboard;
+   }
+@@ -757,6 +861,12 @@ void PixhawkPlatform::px4VehicleControlModeCallback(
+   }
+ }
+ 
++void PixhawkPlatform::px4EstimatorStatusFlagsCallback(
++  const px4_msgs::msg::EstimatorStatusFlags::SharedPtr msg)
++{
++  offboard_guard_.onInAir(steady_clock_.now().seconds(), msg->cs_in_air);
++}
++
+ void PixhawkPlatform::px4GpsCallback(const px4_msgs::msg::SensorGps::SharedPtr msg)
+ {
+   // Reference:
+diff --git a/tests/offboard_guard_gtest.cpp b/tests/offboard_guard_gtest.cpp
+new file mode 100644
+index 0000000..d7a0126
+--- /dev/null
++++ b/tests/offboard_guard_gtest.cpp
+@@ -0,0 +1,333 @@
++// filepath: src/as2_platform_pixhawk/tests/offboard_guard_gtest.cpp
++// Copyright 2026 Kaan Ural
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions are met:
++//
++//    * Redistributions of source code must retain the above copyright
++//      notice, this list of conditions and the following disclaimer.
++//
++//    * Redistributions in binary form must reproduce the above copyright
++//      notice, this list of conditions and the following disclaimer in the
++//      documentation and/or other materials provided with the distribution.
++//
++//    * Neither the name of the copyright holder nor the names of its
++//      contributors may be used to endorse or promote products derived from
++//      this software without specific prior written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
++// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++// POSSIBILITY OF SUCH DAMAGE.
++
++/**
++ * @file offboard_guard_gtest.cpp
++ *
++ * Unit tests for OffboardGuard, one or more per rule in offboard_guard.hpp.
++ * Default timeouts: odometry 0.2 s, in-air flag 3.0 s, control mode 1.5 s,
++ * request window 2.0 s.
++ */
++
++#include <gtest/gtest.h>
++
++#include <cmath>
++#include <cstring>
++
++#include "offboard_guard.hpp"
++
++namespace as2_platform_pixhawk
++{
++namespace
++{
++
++using Action = OffboardGuard::Action;
++
++// Feeds all three inputs at time t, so the freshness gate passes at t.
++void feed(
++  OffboardGuard & g, double t, bool offboard, bool armed, bool in_air,
++  double x = 1.0, double y = 2.0, double z = -3.0, double yaw = 0.5, uint8_t reset = 0)
++{
++  g.onOdometry(t, x, y, z, yaw, reset);
++  g.onInAir(t, in_air);
++  g.onControlMode(t, offboard, armed);
++}
++
++// Rule A: freshness gate.
++
++TEST(OffboardGuard, NoInputsPublishesNothing)
++{
++  OffboardGuard g;
++  EXPECT_FALSE(g.heartbeatAllowed(10.0));
++  EXPECT_EQ(g.decide(10.0, true).action, Action::kNone);
++}
++
++TEST(OffboardGuard, EachStaleInputStopsHeartbeatWithItsReason)
++{
++  OffboardGuard g;
++  const char * reason = "";
++  feed(g, 0.0, false, true, true);
++  EXPECT_EQ(g.decide(0.1, false).action, Action::kHeartbeat);
++
++  EXPECT_FALSE(g.heartbeatAllowed(0.25, &reason));  // odometry 0.25 s old
++  EXPECT_NE(std::strstr(reason, "odometry"), nullptr);
++  EXPECT_EQ(g.decide(0.25, false).action, Action::kNone);
++
++  g.onOdometry(1.6, 1.0, 2.0, -3.0, 0.5, 0);  // control mode now 1.6 s old
++  EXPECT_FALSE(g.heartbeatAllowed(1.6, &reason));
++  EXPECT_NE(std::strstr(reason, "control mode"), nullptr);
++  g.onControlMode(1.6, false, true);
++  EXPECT_EQ(g.decide(1.6, false).action, Action::kHeartbeat);
++
++  g.onOdometry(3.1, 1.0, 2.0, -3.0, 0.5, 0);  // in-air flag now 3.1 s old
++  g.onControlMode(3.1, false, true);
++  EXPECT_FALSE(g.heartbeatAllowed(3.1, &reason));
++  EXPECT_NE(std::strstr(reason, "in-air"), nullptr);
++  g.onInAir(3.1, true);
++  EXPECT_TRUE(g.heartbeatAllowed(3.1, &reason));
++  EXPECT_STREQ(reason, "");
++}
++
++TEST(OffboardGuard, InvalidOdometrySampleStopsHeartbeat)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true);
++  g.onOdometry(0.05, NAN, 2.0, -3.0, 0.5, 0);
++  EXPECT_EQ(g.decide(0.05, false).action, Action::kNone);
++  g.onOdometry(0.06, 1.0, 2.0, -3.0, NAN, 0);
++  EXPECT_EQ(g.decide(0.06, false).action, Action::kNone);
++}
++
++TEST(OffboardGuard, OutsideOffboardOnlyHeartbeat)
++{
++  for (bool armed : {false, true}) {
++    for (bool in_air : {false, true}) {
++      for (bool settled : {false, true}) {
++        OffboardGuard g;
++        feed(g, 0.0, false, armed, in_air);
++        g.onOffboardRequested(0.01);
++        g.onControlModeSet(0.02);
++        EXPECT_EQ(g.decide(0.03, settled).action, Action::kHeartbeat)
++          << "armed=" << armed << " in_air=" << in_air << " settled=" << settled;
++      }
++    }
++  }
++}
++
++// Rule B: every entry starts with a hold.
++
++TEST(OffboardGuard, RcEntryInAirHoldsEntryPoseNotLaterPose)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true, 1.0, 2.0, -3.0, 0.5);
++  feed(g, 0.1, true, true, true, 1.0, 2.0, -3.0, 0.5);  // RC offboard switch
++  auto d = g.decide(0.1, false);
++  ASSERT_EQ(d.action, Action::kHoldAir);
++  EXPECT_DOUBLE_EQ(d.x, 1.0);
++  EXPECT_DOUBLE_EQ(d.y, 2.0);
++  EXPECT_DOUBLE_EQ(d.z, -3.0);
++  EXPECT_DOUBLE_EQ(d.yaw, 0.5);
++
++  feed(g, 0.15, true, true, true, 1.4, 2.3, -2.8, 0.7);  // drift; hold point stays
++  d = g.decide(0.15, false);
++  ASSERT_EQ(d.action, Action::kHoldAir);
++  EXPECT_DOUBLE_EQ(d.x, 1.0);
++  EXPECT_DOUBLE_EQ(d.y, 2.0);
++  EXPECT_DOUBLE_EQ(d.z, -3.0);
++  EXPECT_DOUBLE_EQ(d.yaw, 0.5);
++}
++
++TEST(OffboardGuard, GroundEntryHoldsGroundThenLatchesAtLiftoffAndReturnsToGround)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, false, 0.0, 0.0, 0.0, 0.1);
++  feed(g, 0.05, true, true, false, 0.0, 0.0, 0.0, 0.1);
++  auto d = g.decide(0.05, false);
++  EXPECT_EQ(d.action, Action::kHoldGround);
++  EXPECT_TRUE(std::isnan(d.x));
++
++  feed(g, 0.1, true, true, true, 0.1, 0.2, -0.5, 0.2);
++  d = g.decide(0.1, false);
++  ASSERT_EQ(d.action, Action::kHoldAir);
++  EXPECT_DOUBLE_EQ(d.z, -0.5);
++
++  feed(g, 0.2, true, true, false, 0.1, 0.2, 0.0, 0.2);  // touched down
++  EXPECT_EQ(g.decide(0.2, false).action, Action::kHoldGround);
++}
++
++TEST(OffboardGuard, EstimatorResetRelatchesHold)
++{
++  OffboardGuard g;
++  feed(g, 0.0, true, true, true, 1.0, 1.0, -1.0, 0.0, 7);
++  EXPECT_DOUBLE_EQ(g.decide(0.0, false).x, 1.0);
++  feed(g, 0.1, true, true, true, 3.0, 1.0, -1.0, 0.0, 7);
++  EXPECT_DOUBLE_EQ(g.decide(0.1, false).x, 1.0);  // same counter: still latched
++  feed(g, 0.2, true, true, true, 3.0, 1.0, -1.0, 0.0, 8);
++  EXPECT_DOUBLE_EQ(g.decide(0.2, false).x, 3.0);  // reset: re-latched where the vehicle is
++}
++
++TEST(OffboardGuard, StaleInputsDuringHoldPublishNothingAndKeepHoldPoint)
++{
++  OffboardGuard g;
++  feed(g, 0.0, true, true, true, 1.0, 1.0, -1.0, 0.0);
++  EXPECT_EQ(g.decide(0.0, false).action, Action::kHoldAir);
++  EXPECT_EQ(g.decide(0.3, false).action, Action::kNone);  // odometry 0.3 s old
++  feed(g, 0.35, true, true, true, 1.2, 1.0, -1.0, 0.0);
++  const auto d = g.decide(0.35, false);
++  ASSERT_EQ(d.action, Action::kHoldAir);
++  EXPECT_DOUBLE_EQ(d.x, 1.0);  // same hold point
++}
++
++TEST(OffboardGuard, StartupAlreadyInOffboardCountsAsUnrequestedEntry)
++{
++  OffboardGuard g;
++  g.onControlModeSet(0.0);
++  feed(g, 0.05, true, true, true);
++  EXPECT_EQ(g.decide(0.05, true).action, Action::kHoldAir);
++  g.onControlModeSet(0.1);
++  EXPECT_EQ(g.decide(0.1, true).action, Action::kForward);
++}
++
++// Rule C: which control modes may be forwarded.
++
++TEST(OffboardGuard, RcEntryIgnoresModeSetBeforeEntry)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true);
++  g.onControlModeSet(0.05);  // a behaviour set a mode outside Offboard
++  feed(g, 0.1, true, true, true);
++  EXPECT_EQ(g.decide(0.1, true).action, Action::kHoldAir);
++}
++
++TEST(OffboardGuard, RcEntryForwardsModeSetAfterEntry)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true);
++  feed(g, 0.1, true, true, true);
++  EXPECT_EQ(g.decide(0.1, false).action, Action::kHoldAir);
++  g.onControlModeSet(0.12);
++  EXPECT_EQ(g.decide(0.13, true).action, Action::kForward);
++}
++
++TEST(OffboardGuard, ForwardRequiresSettledMode)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true);
++  g.onOffboardRequested(0.05);
++  feed(g, 0.1, true, true, true);
++  g.onControlModeSet(0.12);
++  EXPECT_EQ(g.decide(0.13, false).action, Action::kHoldAir);
++}
++
++TEST(OffboardGuard, RequestedEntryForwardsModeSetBeforePx4ReportsOffboard)
++{
++  // DroneInterface order offboard(), arm(), takeoff(): the takeoff mode can be
++  // set before PX4's control mode report arrives.
++  OffboardGuard g;
++  feed(g, 0.0, false, false, false);
++  g.onOffboardRequested(0.1);
++  g.onControlModeSet(0.3);
++  feed(g, 0.4, true, true, false);
++  EXPECT_EQ(g.decide(0.4, true).action, Action::kForward);
++}
++
++TEST(OffboardGuard, RequestedEntryHoldsModeSetBeforeRequest)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true);
++  g.onControlModeSet(0.05);
++  g.onOffboardRequested(0.1);
++  feed(g, 0.2, true, true, true);
++  EXPECT_EQ(g.decide(0.2, true).action, Action::kHoldAir);
++}
++
++TEST(OffboardGuard, EntryOutsideRequestWindowCountsAsUnrequested)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true);
++  g.onOffboardRequested(0.1);  // e.g. refused by PX4
++  g.onControlModeSet(0.2);
++  feed(g, 2.5, true, true, true);  // RC entry 2.4 s after the request
++  EXPECT_EQ(g.decide(2.5, true).action, Action::kHoldAir);
++}
++
++TEST(OffboardGuard, HoldAfterForwardingStartsAtCurrentPose)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true, 0.0, 0.0, -1.0, 0.0);
++  g.onOffboardRequested(0.05);
++  feed(g, 0.1, true, true, true, 0.0, 0.0, -1.0, 0.0);
++  EXPECT_EQ(g.decide(0.1, false).action, Action::kHoldAir);
++  g.onControlModeSet(0.15);
++  EXPECT_EQ(g.decide(0.15, true).action, Action::kForward);
++  feed(g, 0.2, true, true, true, 2.0, 1.0, -1.5, 0.3);  // AS2 flew elsewhere
++  const auto d = g.decide(0.2, false);  // mode no longer settled
++  ASSERT_EQ(d.action, Action::kHoldAir);
++  EXPECT_DOUBLE_EQ(d.x, 2.0);
++  EXPECT_DOUBLE_EQ(d.y, 1.0);
++  EXPECT_DOUBLE_EQ(d.z, -1.5);
++  EXPECT_DOUBLE_EQ(d.yaw, 0.3);
++}
++
++// Rule D: exit or disarm ends forwarding for this process.
++
++TEST(OffboardGuard, ExitEndsForwardingForThisProcess)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true);
++  g.onOffboardRequested(0.1);
++  feed(g, 0.2, true, true, true);
++  g.onControlModeSet(0.25);
++  EXPECT_EQ(g.decide(0.25, true).action, Action::kForward);
++
++  feed(g, 0.3, false, true, true);  // pilot takeover, watchdog land or failsafe
++  EXPECT_TRUE(g.forwardingDisabled());
++  EXPECT_EQ(g.decide(0.3, true).action, Action::kHeartbeat);
++
++  g.onOffboardRequested(0.35);
++  feed(g, 0.4, true, true, true, 5.0, 6.0, -2.0, 1.0);
++  g.onControlModeSet(0.45);
++  const auto d = g.decide(0.5, true);
++  ASSERT_EQ(d.action, Action::kHoldAir);
++  EXPECT_DOUBLE_EQ(d.x, 5.0);  // holds at the re-entry pose
++}
++
++TEST(OffboardGuard, DisarmEndsForwardingForThisProcess)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, false, false);
++  g.onOffboardRequested(0.1);
++  feed(g, 0.2, true, true, false);
++  g.onControlModeSet(0.25);
++  EXPECT_EQ(g.decide(0.25, true).action, Action::kForward);
++
++  feed(g, 0.3, true, false, false);  // auto-disarm after landing, still Offboard
++  EXPECT_TRUE(g.forwardingDisabled());
++  EXPECT_EQ(g.decide(0.3, true).action, Action::kHoldGround);
++
++  g.onOffboardRequested(0.35);
++  g.onControlModeSet(0.4);
++  feed(g, 0.45, true, true, false);
++  EXPECT_EQ(g.decide(0.45, true).action, Action::kHoldGround);
++}
++
++TEST(OffboardGuard, DisableForwardingHolds)
++{
++  OffboardGuard g;
++  feed(g, 0.0, false, true, true);
++  g.onOffboardRequested(0.05);
++  feed(g, 0.1, true, true, true);
++  g.onControlModeSet(0.12);
++  EXPECT_EQ(g.decide(0.13, true).action, Action::kForward);
++  g.disableForwarding();
++  EXPECT_EQ(g.decide(0.14, true).action, Action::kHoldAir);
++}
++
++}  // namespace
++}  // namespace as2_platform_pixhawk
+diff --git a/tests/offboard_node_gtest.cpp b/tests/offboard_node_gtest.cpp
+new file mode 100644
+index 0000000..a0ebe02
+--- /dev/null
++++ b/tests/offboard_node_gtest.cpp
+@@ -0,0 +1,503 @@
++// filepath: src/as2_platform_pixhawk/tests/offboard_node_gtest.cpp
++// Copyright 2026 Kaan Ural
++//
++// Redistribution and use in source and binary forms, with or without
++// modification, are permitted provided that the following conditions are met:
++//
++//    * Redistributions of source code must retain the above copyright
++//      notice, this list of conditions and the following disclaimer.
++//
++//    * Redistributions in binary form must reproduce the above copyright
++//      notice, this list of conditions and the following disclaimer in the
++//      documentation and/or other materials provided with the distribution.
++//
++//    * Neither the name of the copyright holder nor the names of its
++//      contributors may be used to endorse or promote products derived from
++//      this software without specific prior written permission.
++//
++// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
++// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++// POSSIBILITY OF SUCH DAMAGE.
++
++/**
++ * @file offboard_node_gtest.cpp
++ *
++ * Node-level tests of the offboard policy (offboard_guard.hpp): a real
++ * PixhawkPlatform node against a fake PX4 that publishes the /fmu/out topics
++ * the platform reads, asserting exactly what the platform sends on /fmu/in.
++ *
++ * SAFETY: every test skips unless ROS_DOMAIN_ID is set and is not 0 (PX4's
++ * default domain), so these tests cannot reach a flight controller. Run them
++ * with the XRCE agent stopped, ROS_LOCALHOST_ONLY=1 and CYCLONEDDS_URI unset.
++ */
++
++#include <gtest/gtest.h>
++
++#include <chrono>
++#include <cmath>
++#include <cstdlib>
++#include <future>
++#include <memory>
++#include <mutex>
++#include <optional>
++#include <string>
++#include <thread>
++#include <vector>
++
++#include <ament_index_cpp/get_package_share_directory.hpp>
++#include <as2_msgs/msg/control_mode.hpp>
++#include <as2_msgs/srv/set_control_mode.hpp>
++#include <geometry_msgs/msg/twist_stamped.hpp>
++#include <px4_msgs/msg/estimator_status_flags.hpp>
++#include <px4_msgs/msg/offboard_control_mode.hpp>
++#include <px4_msgs/msg/trajectory_setpoint.hpp>
++#include <px4_msgs/msg/vehicle_attitude_setpoint.hpp>
++#include <px4_msgs/msg/vehicle_command.hpp>
++#include <px4_msgs/msg/vehicle_control_mode.hpp>
++#include <px4_msgs/msg/vehicle_odometry.hpp>
++#include <px4_msgs/msg/vehicle_rates_setpoint.hpp>
++#include <rclcpp/rclcpp.hpp>
++#include <std_srvs/srv/set_bool.hpp>
++
++#include "pixhawk_platform.hpp"
++
++namespace as2_platform_pixhawk
++{
++namespace
++{
++
++using namespace std::chrono_literals;  // NOLINT
++
++const char kNamespace[] = "offboard_node_test";
++
++std::string inNamespace(const std::string & name)
++{
++  return std::string("/") + kNamespace + "/" + name;
++}
++
++struct Recorded
++{
++  std::vector<px4_msgs::msg::OffboardControlMode> heartbeats;
++  std::vector<px4_msgs::msg::TrajectorySetpoint> setpoints;
++  std::vector<px4_msgs::msg::VehicleCommand> commands;
++};
++
++// Fake PX4: publishes vehicle_control_mode, estimator_status_flags and
++// vehicle_odometry every 20 ms, plus an AS2 actuator twist, and records what
++// the platform sends on /fmu/in.
++class FakePx4 : public rclcpp::Node
++{
++public:
++  FakePx4()
++  : Node("fake_px4")
++  {
++    const auto qos = rclcpp::SensorDataQoS();
++    control_mode_pub_ = create_publisher<px4_msgs::msg::VehicleControlMode>(
++      "/fmu/out/vehicle_control_mode", qos);
++    odometry_pub_ = create_publisher<px4_msgs::msg::VehicleOdometry>(
++      "/fmu/out/vehicle_odometry", qos);
++    flags_pub_ = create_publisher<px4_msgs::msg::EstimatorStatusFlags>(
++      "/fmu/out/estimator_status_flags", qos);
++    twist_pub_ = create_publisher<geometry_msgs::msg::TwistStamped>(
++      inNamespace("actuator_command/twist"), rclcpp::QoS(10));
++
++    heartbeat_sub_ = create_subscription<px4_msgs::msg::OffboardControlMode>(
++      "/fmu/in/offboard_control_mode", qos,
++      [this](px4_msgs::msg::OffboardControlMode::SharedPtr msg) {
++        std::lock_guard<std::mutex> lock(mutex_);
++        recorded_.heartbeats.push_back(*msg);
++      });
++    setpoint_sub_ = create_subscription<px4_msgs::msg::TrajectorySetpoint>(
++      "/fmu/in/trajectory_setpoint", qos,
++      [this](px4_msgs::msg::TrajectorySetpoint::SharedPtr msg) {
++        std::lock_guard<std::mutex> lock(mutex_);
++        recorded_.setpoints.push_back(*msg);
++      });
++    command_sub_ = create_subscription<px4_msgs::msg::VehicleCommand>(
++      "/fmu/in/vehicle_command", qos,
++      [this](px4_msgs::msg::VehicleCommand::SharedPtr msg) {
++        std::lock_guard<std::mutex> lock(mutex_);
++        recorded_.commands.push_back(*msg);
++      });
++    rates_sub_ = create_subscription<px4_msgs::msg::VehicleRatesSetpoint>(
++      "/fmu/in/vehicle_rates_setpoint", qos,
++      [this](px4_msgs::msg::VehicleRatesSetpoint::SharedPtr) {
++        std::lock_guard<std::mutex> lock(mutex_);
++        ++rates_and_attitude_setpoints_;
++      });
++    attitude_sub_ = create_subscription<px4_msgs::msg::VehicleAttitudeSetpoint>(
++      "/fmu/in/vehicle_attitude_setpoint", qos,
++      [this](px4_msgs::msg::VehicleAttitudeSetpoint::SharedPtr) {
++        std::lock_guard<std::mutex> lock(mutex_);
++        ++rates_and_attitude_setpoints_;
++      });
++
++    offboard_client_ = create_client<std_srvs::srv::SetBool>(inNamespace("set_offboard_mode"));
++    mode_client_ = create_client<as2_msgs::srv::SetControlMode>(
++      inNamespace("set_platform_control_mode"));
++
++    timer_ = create_wall_timer(20ms, [this]() {publishState();});
++  }
++
++  void set(bool offboard, bool armed, bool in_air)
++  {
++    std::lock_guard<std::mutex> lock(mutex_);
++    offboard_ = offboard;
++    armed_ = armed;
++    in_air_ = in_air;
++  }
++
++  void setPose(float x, float y, float z, float yaw)
++  {
++    std::lock_guard<std::mutex> lock(mutex_);
++    x_ = x;
++    y_ = y;
++    z_ = z;
++    yaw_ = yaw;
++  }
++
++  void setOdometryEnabled(bool enabled)
++  {
++    std::lock_guard<std::mutex> lock(mutex_);
++    odometry_enabled_ = enabled;
++  }
++
++  void setTwistUp(double vz)
++  {
++    std::lock_guard<std::mutex> lock(mutex_);
++    twist_up_ = vz;
++  }
++
++  void clear()
++  {
++    std::lock_guard<std::mutex> lock(mutex_);
++    recorded_ = Recorded();
++  }
++
++  Recorded snapshot()
++  {
++    std::lock_guard<std::mutex> lock(mutex_);
++    return recorded_;
++  }
++
++  int ratesAndAttitudeSetpoints()
++  {
++    std::lock_guard<std::mutex> lock(mutex_);
++    return rates_and_attitude_setpoints_;
++  }
++
++  // Empty optional: no response.
++  std::optional<bool> requestOffboard()
++  {
++    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
++    request->data = true;
++    if (!offboard_client_->wait_for_service(3s)) {
++      return std::nullopt;
++    }
++    auto future = offboard_client_->async_send_request(request);
++    if (future.wait_for(3s) != std::future_status::ready) {
++      return std::nullopt;
++    }
++    return future.get()->success;
++  }
++
++  std::optional<bool> requestSpeedMode()
++  {
++    auto request = std::make_shared<as2_msgs::srv::SetControlMode::Request>();
++    request->control_mode.control_mode = as2_msgs::msg::ControlMode::SPEED;
++    request->control_mode.yaw_mode = as2_msgs::msg::ControlMode::YAW_SPEED;
++    request->control_mode.reference_frame = as2_msgs::msg::ControlMode::LOCAL_ENU_FRAME;
++    if (!mode_client_->wait_for_service(3s)) {
++      return std::nullopt;
++    }
++    auto future = mode_client_->async_send_request(request);
++    if (future.wait_for(3s) != std::future_status::ready) {
++      return std::nullopt;
++    }
++    return future.get()->success;
++  }
++
++private:
++  void publishState()
++  {
++    px4_msgs::msg::VehicleControlMode mode;
++    px4_msgs::msg::EstimatorStatusFlags flags;
++    px4_msgs::msg::VehicleOdometry odometry;
++    geometry_msgs::msg::TwistStamped twist;
++    bool odometry_enabled = false;
++    {
++      std::lock_guard<std::mutex> lock(mutex_);
++      mode.flag_armed = armed_;
++      mode.flag_control_offboard_enabled = offboard_;
++      flags.cs_in_air = in_air_;
++      odometry.pose_frame = px4_msgs::msg::VehicleOdometry::POSE_FRAME_NED;
++      odometry.velocity_frame = px4_msgs::msg::VehicleOdometry::VELOCITY_FRAME_NED;
++      odometry.position = {x_, y_, z_};
++      odometry.q = {std::cos(yaw_ / 2.0f), 0.0f, 0.0f, std::sin(yaw_ / 2.0f)};
++      odometry.velocity = {0.0f, 0.0f, 0.0f};
++      odometry.angular_velocity = {0.0f, 0.0f, 0.0f};
++      odometry_enabled = odometry_enabled_;
++      twist.twist.linear.z = twist_up_;
++    }
++    control_mode_pub_->publish(mode);
++    flags_pub_->publish(flags);
++    if (odometry_enabled) {
++      odometry_pub_->publish(odometry);
++    }
++    twist.header.stamp = now();
++    twist_pub_->publish(twist);
++  }
++
++  std::mutex mutex_;
++  bool offboard_ = false;
++  bool armed_ = false;
++  bool in_air_ = false;
++  bool odometry_enabled_ = true;
++  float x_ = 1.0f;
++  float y_ = 2.0f;
++  float z_ = -3.0f;
++  float yaw_ = 0.5f;
++  double twist_up_ = 0.0;
++  Recorded recorded_;
++  int rates_and_attitude_setpoints_ = 0;
++
++  rclcpp::Publisher<px4_msgs::msg::VehicleControlMode>::SharedPtr control_mode_pub_;
++  rclcpp::Publisher<px4_msgs::msg::VehicleOdometry>::SharedPtr odometry_pub_;
++  rclcpp::Publisher<px4_msgs::msg::EstimatorStatusFlags>::SharedPtr flags_pub_;
++  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist_pub_;
++  rclcpp::Subscription<px4_msgs::msg::OffboardControlMode>::SharedPtr heartbeat_sub_;
++  rclcpp::Subscription<px4_msgs::msg::TrajectorySetpoint>::SharedPtr setpoint_sub_;
++  rclcpp::Subscription<px4_msgs::msg::VehicleCommand>::SharedPtr command_sub_;
++  rclcpp::Subscription<px4_msgs::msg::VehicleRatesSetpoint>::SharedPtr rates_sub_;
++  rclcpp::Subscription<px4_msgs::msg::VehicleAttitudeSetpoint>::SharedPtr attitude_sub_;
++  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr offboard_client_;
++  rclcpp::Client<as2_msgs::srv::SetControlMode>::SharedPtr mode_client_;
++  rclcpp::TimerBase::SharedPtr timer_;
++};
++
++std::shared_ptr<PixhawkPlatform> makePlatform()
++{
++  const std::string share = ament_index_cpp::get_package_share_directory("as2_platform_pixhawk");
++  rclcpp::NodeOptions options;
++  options.arguments(
++      {
++        "--ros-args",
++        "-r", std::string("__ns:=/") + kNamespace,
++        "-p", std::string("namespace:=") + kNamespace,
++        "-p", "use_sim_time:=false",
++        "-p", "control_modes_file:=" + share + "/config/control_modes.yaml",
++        "--params-file", share + "/config/platform_config_file.yaml",
++      });
++  return std::make_shared<PixhawkPlatform>(options);
++}
++
++class OffboardNodeTest : public ::testing::Test
++{
++protected:
++  static void SetUpTestSuite()
++  {
++    if (!rclcpp::ok()) {
++      rclcpp::init(0, nullptr);
++    }
++  }
++
++  static void TearDownTestSuite()
++  {
++    rclcpp::shutdown();
++  }
++
++  void SetUp() override
++  {
++    const char * domain = std::getenv("ROS_DOMAIN_ID");
++    if (domain == nullptr || std::string(domain).empty() || std::string(domain) == "0") {
++      GTEST_SKIP() << "Set ROS_DOMAIN_ID to a non-zero value: domain 0 is the flight controller's";
++    }
++    fake_ = std::make_shared<FakePx4>();
++    platform_ = makePlatform();
++    executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
++    executor_->add_node(fake_);
++    executor_->add_node(platform_);
++    spin_thread_ = std::thread([this]() {executor_->spin();});
++    std::this_thread::sleep_for(1500ms);  // discovery
++  }
++
++  void TearDown() override
++  {
++    if (executor_) {
++      executor_->cancel();
++    }
++    if (spin_thread_.joinable()) {
++      spin_thread_.join();
++    }
++    platform_.reset();
++    fake_.reset();
++    executor_.reset();
++  }
++
++  // Waits settle, clears the recording, records for window, returns it.
++  Recorded record(
++    std::chrono::milliseconds settle = 300ms, std::chrono::milliseconds window = 500ms)
++  {
++    std::this_thread::sleep_for(settle);
++    fake_->clear();
++    std::this_thread::sleep_for(window);
++    return fake_->snapshot();
++  }
++
++  std::shared_ptr<FakePx4> fake_;
++  std::shared_ptr<PixhawkPlatform> platform_;
++  std::shared_ptr<rclcpp::executors::MultiThreadedExecutor> executor_;
++  std::thread spin_thread_;
++};
++
++TEST_F(OffboardNodeTest, OutsideOffboardSendsOnlyTheHeartbeatEvenArmedInTheAir)
++{
++  fake_->set(false, true, true);
++  const Recorded r = record();
++  EXPECT_GE(r.heartbeats.size(), 20u);
++  for (const auto & heartbeat : r.heartbeats) {
++    EXPECT_TRUE(heartbeat.position);
++    EXPECT_FALSE(heartbeat.velocity);
++    EXPECT_FALSE(heartbeat.acceleration);
++    EXPECT_FALSE(heartbeat.attitude);
++    EXPECT_FALSE(heartbeat.body_rate);
++  }
++  EXPECT_EQ(r.setpoints.size(), 0u);
++  EXPECT_EQ(r.commands.size(), 0u);
++  EXPECT_EQ(fake_->ratesAndAttitudeSetpoints(), 0);
++}
++
++TEST_F(OffboardNodeTest, StaleOdometryStopsTheHeartbeatAndRefusesOffboard)
++{
++  fake_->set(false, true, true);
++  fake_->setOdometryEnabled(false);
++  Recorded r = record();
++  EXPECT_EQ(r.heartbeats.size(), 0u);
++
++  EXPECT_EQ(fake_->requestOffboard(), std::optional<bool>(false));
++  std::this_thread::sleep_for(200ms);
++  r = fake_->snapshot();
++  EXPECT_EQ(r.commands.size(), 0u);
++  EXPECT_EQ(r.setpoints.size(), 0u);
++
++  fake_->setOdometryEnabled(true);
++  r = record(300ms, 300ms);
++  EXPECT_GE(r.heartbeats.size(), 10u);
++}
++
++TEST_F(OffboardNodeTest, EntryInTheAirHoldsTheEntryPoseAndYaw)
++{
++  fake_->setPose(1.0f, 2.0f, -3.0f, 0.5f);
++  fake_->set(false, true, true);
++  std::this_thread::sleep_for(500ms);
++  fake_->set(true, true, true);  // pilot flips the RC offboard switch
++  std::this_thread::sleep_for(300ms);
++  fake_->setPose(1.5f, 2.5f, -2.5f, 0.9f);  // the vehicle drifts after entry
++  const Recorded r = record(100ms, 500ms);
++
++  ASSERT_GE(r.setpoints.size(), 20u);
++  for (const auto & setpoint : r.setpoints) {
++    EXPECT_FLOAT_EQ(setpoint.position[0], 1.0f);
++    EXPECT_FLOAT_EQ(setpoint.position[1], 2.0f);
++    EXPECT_FLOAT_EQ(setpoint.position[2], -3.0f);
++    EXPECT_NEAR(setpoint.yaw, 0.5f, 1e-5);
++    EXPECT_TRUE(std::isnan(setpoint.velocity[0]));
++    EXPECT_TRUE(std::isnan(setpoint.velocity[1]));
++    EXPECT_TRUE(std::isnan(setpoint.velocity[2]));
++    EXPECT_TRUE(std::isnan(setpoint.acceleration[2]));
++  }
++  for (const auto & heartbeat : r.heartbeats) {
++    EXPECT_TRUE(heartbeat.position);
++  }
++  EXPECT_EQ(fake_->ratesAndAttitudeSetpoints(), 0);
++}
++
++TEST_F(OffboardNodeTest, EntryOnTheGroundSendsZeroVelocityAndNoPosition)
++{
++  fake_->set(false, true, false);
++  std::this_thread::sleep_for(300ms);
++  fake_->set(true, true, false);
++  const Recorded r = record();
++
++  ASSERT_GE(r.setpoints.size(), 20u);
++  for (const auto & setpoint : r.setpoints) {
++    EXPECT_TRUE(std::isnan(setpoint.position[0]));
++    EXPECT_TRUE(std::isnan(setpoint.position[1]));
++    EXPECT_TRUE(std::isnan(setpoint.position[2]));
++    EXPECT_FLOAT_EQ(setpoint.velocity[0], 0.0f);
++    EXPECT_FLOAT_EQ(setpoint.velocity[1], 0.0f);
++    EXPECT_FLOAT_EQ(setpoint.velocity[2], 0.0f);
++  }
++  EXPECT_EQ(fake_->ratesAndAttitudeSetpoints(), 0);
++}
++
++TEST_F(OffboardNodeTest, ForwardsAfterRequestAndModeThenExitEndsSetpointsForThisProcess)
++{
++  fake_->set(false, false, false);
++  std::this_thread::sleep_for(300ms);
++
++  EXPECT_EQ(fake_->requestOffboard(), std::optional<bool>(true));
++  std::this_thread::sleep_for(200ms);
++  {
++    const Recorded r = fake_->snapshot();
++    ASSERT_EQ(r.commands.size(), 1u);
++    EXPECT_EQ(r.commands[0].command, px4_msgs::msg::VehicleCommand::VEHICLE_CMD_DO_SET_MODE);
++    EXPECT_FLOAT_EQ(r.commands[0].param1, 1.0f);
++    EXPECT_FLOAT_EQ(r.commands[0].param2, 6.0f);
++  }
++
++  fake_->set(true, true, false);  // PX4 enters Offboard, vehicle armed on the ground
++  fake_->setTwistUp(0.5);
++  std::this_thread::sleep_for(200ms);
++  EXPECT_EQ(fake_->requestSpeedMode(), std::optional<bool>(true));
++  {
++    const Recorded r = record();
++    ASSERT_GE(r.setpoints.size(), 20u);
++    for (const auto & setpoint : r.setpoints) {
++      EXPECT_NEAR(setpoint.velocity[2], -0.5f, 1e-5);  // ENU up = NED -z
++      EXPECT_TRUE(std::isnan(setpoint.position[2]));
++    }
++    for (const auto & heartbeat : r.heartbeats) {
++      EXPECT_TRUE(heartbeat.velocity);
++      EXPECT_FALSE(heartbeat.position);
++    }
++  }
++
++  fake_->set(false, true, true);  // pilot takes over in the air
++  {
++    const Recorded r = record(200ms, 500ms);
++    EXPECT_EQ(r.setpoints.size(), 0u);
++    ASSERT_GE(r.heartbeats.size(), 20u);
++    for (const auto & heartbeat : r.heartbeats) {
++      EXPECT_TRUE(heartbeat.position);
++    }
++  }
++
++  fake_->setPose(4.0f, 5.0f, -6.0f, 0.1f);
++  fake_->set(true, true, true);  // back into Offboard, same process
++  std::this_thread::sleep_for(200ms);
++  EXPECT_EQ(fake_->requestSpeedMode(), std::optional<bool>(true));
++  {
++    const Recorded r = record();
++    ASSERT_GE(r.setpoints.size(), 20u);
++    for (const auto & setpoint : r.setpoints) {
++      EXPECT_FLOAT_EQ(setpoint.position[0], 4.0f);
++      EXPECT_FLOAT_EQ(setpoint.position[1], 5.0f);
++      EXPECT_FLOAT_EQ(setpoint.position[2], -6.0f);
++      EXPECT_NEAR(setpoint.yaw, 0.1f, 1e-5);
++      EXPECT_TRUE(std::isnan(setpoint.velocity[2]));
++    }
++  }
++  EXPECT_EQ(fake_->ratesAndAttitudeSetpoints(), 0);
++}
++
++}  // namespace
++}  // namespace as2_platform_pixhawk

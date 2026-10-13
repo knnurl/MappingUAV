@@ -17,17 +17,26 @@ SOLE EV WRITER [FIXED]: px4_odom_bridge is the only node allowed to send on
 platform_pixhawk.yaml sets external_odom: false. Expected at Gate 5:
 `ros2 topic info -v /fmu/in/vehicle_visual_odometry` lists TWO publishers,
 px4_odom_bridge (RELIABLE, sending ~10 Hz) and <namespace>/platform
-(BEST_EFFORT, silent: pixhawk_platform.cpp:134 creates it unconditionally).
+(BEST_EFFORT, silent: the platform constructor creates it unconditionally).
 Only px4_odom_bridge may be sending; the bridge logs every other publisher.
+
+OFFBOARD HOLD PATCH [FIXED]: this launch also refuses to start unless the
+as2_platform_pixhawk node was built with
+deploy/patches/as2_platform_pixhawk_offboard_hold.patch. Unpatched, PX4 v1.15
+mixes the platform's setpoints into POSITION and Land, and entering Offboard
+before a behaviour starts drops the vehicle (see offboard_guard.hpp in the
+patch).
 """
 import os
 import yaml
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+
+OFFBOARD_HOLD_MARKER = b'OFFBOARD HOLD'
 
 
 def assert_external_odom_off(platform_cfg_path):
@@ -47,11 +56,29 @@ def assert_external_odom_off(platform_cfg_path):
             '/fmu/in/vehicle_visual_odometry [FIXED, masterplan §7].')
 
 
+def assert_offboard_hold_patch(platform_node_path):
+    """Refuse to launch a platform node built without the offboard hold patch.
+
+    The patched node carries the log text "OFFBOARD HOLD"; an unpatched build
+    does not. The executable itself is checked, not the source tree.
+    """
+    with open(platform_node_path, 'rb') as f:
+        patched = OFFBOARD_HOLD_MARKER in f.read()
+    if not patched:
+        raise RuntimeError(
+            f'{platform_node_path} was built without '
+            'deploy/patches/as2_platform_pixhawk_offboard_hold.patch. Apply it after the '
+            'px4_msgs patch, rebuild, and run its offboard tests (gate5 runbook A0).')
+
+
 def generate_launch_description():
     bringup_share = get_package_share_directory('drone_bringup')
     as2_cfg = os.path.join(bringup_share, 'config', 'as2')
     platform_share = get_package_share_directory('as2_platform_pixhawk')
     assert_external_odom_off(os.path.join(as2_cfg, 'platform_pixhawk.yaml'))
+    assert_offboard_hold_patch(os.path.join(
+        get_package_prefix('as2_platform_pixhawk'),
+        'lib', 'as2_platform_pixhawk', 'as2_platform_pixhawk_node'))
 
     namespace = LaunchConfiguration('namespace')
 

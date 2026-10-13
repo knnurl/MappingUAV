@@ -17,4 +17,7 @@ repositories:
   as2_platform_pixhawk:
     type: git
     url: https://github.com/aerostack2/as2_platform_pixhawk.git
-    version: 482563ba979baea965df918995c141a362e26637   # main @ 2026-07-05; apply deploy/patches/as2_platform_pixhawk_px4msgs_1.15.patch after import
+    version: 482563ba979baea965df918995c141a362e26637   # main @ 2026-07-05
+    # After import, from src/as2_platform_pixhawk, git apply in this order:
+    #   deploy/patches/as2_platform_pixhawk_px4msgs_1.15.patch
+    #   deploy/patches/as2_platform_pixhawk_offboard_hold.patch

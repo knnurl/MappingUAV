@@ -7,6 +7,13 @@
 #    odometry (EKF2's own output) into EKF2's EV input at 100 Hz: a feedback
 #    loop that outvotes LIO 10:1. gate5_as2.launch.py refuses to launch unless
 #    this is false.
+#  - min_thrust 0.15 = upstream default, operator-approved 2026-09-13 (was
+#    0.5). Unpatched upstream streams a body-rate setpoint with thrust
+#    -min_thrust, as a normalised 0..1 value, before a control mode is set
+#    (pixhawk_platform.cpp:254-262 at 482563b): 0.5 meant ~50% thrust on the
+#    ground. deploy/patches/as2_platform_pixhawk_offboard_hold.patch removes
+#    that stream; min_thrust is then used only by the ATTITUDE and ACRO
+#    paths, which Gate 5 does not use.
 #  - X500 hover thrust ~ mid-stick; max_thrust bounds the attitude-mode
 #    thrust mapping. Values below are bench-safe placeholders; the platform
 #    is not integrated on the vehicle until the gate5 token anyway.
@@ -15,7 +22,7 @@
     cmd_freq: 100.0          # Hz of platform command stream (offboard keepalive)
     info_freq: 10.0
     max_thrust: 25.0         # N, ~4x X500 hover thrust headroom [MEASURE at gate5 tuning]
-    min_thrust: 0.5          # N
+    min_thrust: 0.15         # see header
     external_odom: false     # [FIXED] see header
     fmu_prefix: ''
     target_system_id: 1
