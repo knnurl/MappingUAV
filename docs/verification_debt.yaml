@@ -1,0 +1,13 @@
+# filepath: docs/verification_debt.yaml
+# The agent adds entries; only the human closes them.
+# Schema per masterplan §1.3. This is main's ledger. VD-001 (wp-g), VD-002
+# (wp-c), VD-003/006 (wp-f), VD-004/005/010 (wp-b) and VD-007…009 (wp-f spec
+# §14) live on their branches; union at merge. Ids are allocated globally so
+# the union never collides.
+debts:
+  - id: VD-011
+    package: px4_odom_bridge (main)
+    claim_untested: "EV sanity guard behaviour against the live chain: that FAST-LIO -> bridge -> PX4 runs for a full session with the guard FORWARDING and zero rejections, and that a real LiDAR power cut latches it BLOCKED on the vehicle as it does in replay. Verified so far only against recorded fixtures from the 2026-09-14 incident (68 tests, mutation-checked) and a fake-LIO/fake-PX4 node harness — never with the LiDAR and FC actually powered."
+    original_criterion: "no diverged external-vision sample reaches EKF2 (operator requirement 2026-09-14: safety and reliability are the ultimate criteria)"
+    discharge_path: "spec §6 step 6: chain up healthy, confirm /px4_odom_bridge/status reports FORWARDING with the forwarded count rising and zero rejections over 10 min; then, at a time of the operator's choosing, pull LiDAR power deliberately and confirm the guard latches BLOCKED, the bridge stops publishing, and PX4 holds its own estimate. Do this on the bench, props off, before any gate 4 flight."
+    status: OPEN

@@ -26,6 +26,11 @@ Design decisions, do not alter without re-reading the handover spec:
   LiDAR's PTP clock instead. That is only valid with phc2sys disciplining the
   Jetson system clock; otherwise the stamps will fail the age check below.
 - Stamps in the future or older than max_sample_age_s are dropped, never sent.
+- Every sample then passes the sanity guard (ev_guard.py): finite values, unit
+  quaternion, bounded radius, no backwards stamps, no gap, no jump. A violation
+  BLOCKS this node permanently, because FAST-LIO does not recover on its own and
+  a restarted one has a new origin. See docs/px4_odom_bridge_ev_guard_spec.md and
+  the 2026-09-14 incident in docs/gate3_verification_2026-09-14.md section 10.
 - timestamp / timestamp_sample are ROS-clock microseconds; with UXRCE_DDS_SYNCT=1
   the PX4 uXRCE-DDS client shifts both into FC time.
 """
@@ -36,8 +41,12 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from nav_msgs.msg import Odometry
 from px4_msgs.msg import VehicleOdometry
+from std_msgs.msg import String
+
+from px4_odom_bridge.ev_guard import EvGuard, GuardConfig, State
 
 EV_TOPIC = '/fmu/in/vehicle_visual_odometry'
+STATUS_TOPIC = '/px4_odom_bridge/status'
 
 # Quaternions as (w, x, y, z).
 # 180 deg rotation about (1,1,0)/sqrt(2): maps ENU world axes onto NED world axes.
@@ -94,6 +103,20 @@ class OdomBridge(Node):
         topic = self.get_parameter('lio_odom_topic').value
         self.max_age_us = int(self.get_parameter('max_sample_age_s').value * 1e6)
 
+        guard_config = GuardConfig(
+            max_step_m=float(self.declare_parameter('ev_max_step_m', 0.30).value),
+            max_gap_s=float(self.declare_parameter('ev_max_gap_s', 1.0).value),
+            max_radius_m=float(self.declare_parameter('ev_max_radius_m', 20.0).value),
+            quat_tolerance=float(self.declare_parameter('ev_quat_tolerance', 0.01).value),
+            warn_step_m=float(self.declare_parameter('ev_warn_step_m', 0.10).value),
+        )
+        try:
+            self.guard = EvGuard(guard_config)
+        except ValueError as exc:
+            self.get_logger().fatal(f'Refusing to start: {exc}')
+            raise
+        self.block_logged = False
+
         # Subscribe with sensor-data-compatible QoS (FAST-LIO publishers vary).
         sub_qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -105,12 +128,19 @@ class OdomBridge(Node):
         self.pub = self.create_publisher(VehicleOdometry, EV_TOPIC, 10)
         self.sub = self.create_subscription(Odometry, topic, self.cb, sub_qos)
 
+        self.status_pub = self.create_publisher(String, STATUS_TOPIC, 10)
+
         self.msg_count = 0
         self.drop_count = 0
         self.known_writers = []
         self.create_timer(5.0, self.health)
         self.create_timer(2.0, self.check_writers)
+        self.create_timer(1.0, self.publish_status)
         self.get_logger().info(f'Bridging {topic} -> {EV_TOPIC}')
+        self.get_logger().info(
+            f'EV guard: max step {guard_config.max_step_m} m, max gap {guard_config.max_gap_s} s, '
+            f'max radius {guard_config.max_radius_m} m. The radius bounds operation: raise it '
+            'for a venue, sized with the geofence and map bounds.')
 
     def cb(self, odom: Odometry):
         now_us = int(self.get_clock().now().nanoseconds / 1000)
@@ -123,13 +153,28 @@ class OdomBridge(Node):
                 throttle_duration_sec=5.0)
             return
 
+        p = odom.pose.pose.position
+        o = odom.pose.pose.orientation
+        decision = self.guard.check(
+            sample_us / 1e6, (p.x, p.y, p.z), (o.w, o.x, o.y, o.z))
+        if not decision.accept:
+            if not self.block_logged:
+                self.block_logged = True
+                self.get_logger().fatal(
+                    f'EXTERNAL VISION BLOCKED: {decision.reason}. Nothing further will be sent to '
+                    'EKF2 until this node is restarted. PX4 will age out the EV measurement; the '
+                    'geofence watchdog owns the response. See '
+                    'docs/px4_odom_bridge_ev_guard_spec.md')
+            self.publish_status()
+            return
+        if decision.warning:
+            self.get_logger().warn(f'EV {decision.warning}', throttle_duration_sec=1.0)
+
         out = VehicleOdometry()
         out.timestamp = now_us
         out.timestamp_sample = sample_us
 
         out.pose_frame = VehicleOdometry.POSE_FRAME_NED
-        p = odom.pose.pose.position
-        o = odom.pose.pose.orientation
         out.position, out.q = enu_flu_to_ned_frd([p.x, p.y, p.z], [o.w, o.x, o.y, o.z])
 
         nan = float('nan')
@@ -145,8 +190,14 @@ class OdomBridge(Node):
         self.pub.publish(out)
         self.msg_count += 1
 
+    def publish_status(self):
+        self.status_pub.publish(String(data=self.guard.status()))
+
     def health(self):
-        if self.msg_count == 0 and self.drop_count == 0:
+        if self.guard.state is State.BLOCKED:
+            self.get_logger().error(
+                f'EV blocked: {self.guard.reason}', throttle_duration_sec=30.0)
+        elif self.msg_count == 0 and self.drop_count == 0:
             self.get_logger().warn('No LIO odometry received in last 5 s')
         elif self.drop_count:
             self.get_logger().warn(
