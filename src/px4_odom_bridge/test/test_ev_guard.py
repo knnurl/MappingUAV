@@ -177,3 +177,45 @@ class TestDeterminism:
         g = guard()
         accept(g, 0.0)
         assert g.status().startswith('FORWARDING forwarded=1')
+
+
+class TestStale:
+    """STALE is reported from the caller's clock; it never changes what check() decides."""
+
+    def test_forwarding_within_the_gap(self):
+        g = guard()
+        accept(g, 0.0)
+        assert g.reported_state(CFG.max_gap_s) is State.FORWARDING
+
+    def test_stale_after_the_gap(self):
+        g = guard()
+        accept(g, 0.0)
+        assert g.reported_state(CFG.max_gap_s + 0.01) is State.STALE
+        assert g.status(CFG.max_gap_s + 0.01).startswith('STALE forwarded=1')
+
+    def test_stale_is_not_stored(self):
+        """A late-arriving sample stamped inside the gap is still judged on its stamp."""
+        g = guard()
+        accept(g, 0.0)
+        assert g.reported_state(CFG.max_gap_s + 0.05) is State.STALE
+        assert g.state is State.FORWARDING
+        assert accept(g, CFG.max_gap_s - 0.05).accept
+
+    def test_resumption_after_long_silence_blocks(self):
+        g = guard()
+        accept(g, 0.0)
+        assert not accept(g, CFG.max_gap_s + 0.5).accept
+        assert g.reported_state(CFG.max_gap_s + 10.0) is State.BLOCKED
+
+    def test_waiting_is_never_stale(self):
+        assert guard().reported_state(1e6) is State.WAITING
+
+    def test_blocked_is_never_stale(self):
+        g = guard()
+        accept(g, 0.0, (float('nan'), 0.0, 0.0))
+        assert g.reported_state(1e6) is State.BLOCKED
+
+    def test_status_without_a_clock_is_unchanged(self):
+        g = guard()
+        accept(g, 0.0)
+        assert g.status().startswith('FORWARDING')

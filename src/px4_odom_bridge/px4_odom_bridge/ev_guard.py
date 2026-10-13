@@ -22,6 +22,13 @@ not recover on its own, and a restarted FAST-LIO has a NEW origin, so resuming
 would hand EKF2 a step change - the same failure by another route. A blocked
 bridge means EV stops, which PX4 and the geofence watchdog already handle.
 
+STALE is reported, never stored: FORWARDING with no accepted sample for longer
+than max_gap_s, judged against the caller's clock when the status is read. It
+exists because a silent LIO otherwise leaves the status reading FORWARDING while
+no EV reaches PX4 (bench run 2026-09-14, gate3 transcript section 13). The guard
+itself stays clock-free; a sample stamped more than max_gap_s after the last
+accepted one still trips G5 and blocks.
+
 Thresholds are defended in the spec against 470 s of measured healthy traffic
 (step median 3.67 mm, p99.9 104 mm; interval median 100 ms, p99.9 131 ms).
 """
@@ -31,10 +38,11 @@ from enum import Enum
 
 
 class State(Enum):
-    """WAITING -> FORWARDING -> BLOCKED. BLOCKED is absorbing."""
+    """WAITING -> FORWARDING -> BLOCKED. BLOCKED is absorbing. STALE is reported only."""
 
     WAITING = 'WAITING'
     FORWARDING = 'FORWARDING'
+    STALE = 'STALE'
     BLOCKED = 'BLOCKED'
 
 
@@ -137,8 +145,15 @@ class EvGuard:
         self.counts.rejected += 1
         return Decision(False, self.state, reason)
 
-    def status(self) -> str:
+    def reported_state(self, now_s: float = None) -> State:
+        """State as seen from outside: FORWARDING turns STALE after max_gap_s of silence."""
+        if (self.state is State.FORWARDING and now_s is not None
+                and now_s - self._last_t > self.config.max_gap_s):
+            return State.STALE
+        return self.state
+
+    def status(self, now_s: float = None) -> str:
         """One-line status for the node's status topic and logs."""
-        text = (f'{self.state.value} forwarded={self.counts.forwarded} '
+        text = (f'{self.reported_state(now_s).value} forwarded={self.counts.forwarded} '
                 f'rejected={self.counts.rejected} warned={self.counts.warned}')
         return f'{text} reason={self.reason}' if self.reason else text

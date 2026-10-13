@@ -128,9 +128,17 @@ class TestBlocking:
 class TestStatusTopic:
     def test_status_published_in_every_state(self, rig):
         fake, _ = rig
-        stream(fake, 4)
-        time.sleep(1.2)
+        stream(fake, 24)                     # keep streaming across a status tick
         assert any(s.startswith('FORWARDING') for s in fake.status)
         fake.send(x=float('inf'))
         time.sleep(1.5)
         assert any(s.startswith('BLOCKED') for s in fake.status)
+
+    def test_silence_reports_stale(self, rig):
+        """A silent LIO must not leave the status reading FORWARDING (2026-09-14 bench run)."""
+        fake, _ = rig
+        stream(fake, 24)
+        before = len(fake.ev)
+        time.sleep(2.5)                      # > max_gap_s plus a 1 Hz status period
+        assert fake.status[-1].startswith('STALE'), fake.status[-3:]
+        assert len(fake.ev) == before

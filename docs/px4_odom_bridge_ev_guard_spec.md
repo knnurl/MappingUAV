@@ -88,6 +88,7 @@ A pure-Python core (`ev_guard.py`, no ROS imports) plus wiring in `odom_bridge_n
 | `WAITING` | No accepted sample yet | no |
 | `FORWARDING` | Healthy | yes |
 | `BLOCKED` | Trust lost, latched for the life of the process | **never again** |
+| `STALE` | *Reported only* (added 2026-10-13): `FORWARDING` with no accepted sample for longer than `max_gap_s`, judged against the node's clock when the status is published. Not stored, so it never changes what `check()` decides | no (nothing is arriving) |
 
 ### 4.2 Rules, evaluated per sample
 | ID | Rule | Violation action |
@@ -114,6 +115,14 @@ declares the estimate invalid if nothing else supports it, and the watchdog land
 `/px4_odom_bridge/status` (`std_msgs/String`, 1 Hz): state, reason, counters for forwarded, dropped and
 warned samples. Deliberately a plain string: no new message package (the masterplan's IR-2 rule for WP-F
 applies by analogy), and easy to read in a runbook.
+
+**`STALE` (added 2026-10-13, operator-approved).** The voided bench run of 2026-09-14 showed the status
+reading `FORWARDING` for minutes while no EV existed, so a pilot would have had to difference the counter to
+notice. The guard stays clock-free; `reported_state(now_s)` derives `STALE` from the last accepted stamp at
+publish time. A sample stamped more than `max_gap_s` after the last accepted one still trips G5 and latches
+`BLOCKED`; one stamped inside the gap but delivered late is still accepted on its stamp, so `STALE` can
+revert to `FORWARDING` only within transport latency. Tests: `TestStale` (7) and the node test
+`test_silence_reports_stale`; a mutant that never reports `STALE` fails 3 of them. 76 tests in total.
 
 ## 5. Test plan
 

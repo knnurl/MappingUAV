@@ -191,7 +191,8 @@ class OdomBridge(Node):
         self.msg_count += 1
 
     def publish_status(self):
-        self.status_pub.publish(String(data=self.guard.status()))
+        now_s = self.get_clock().now().nanoseconds / 1e9
+        self.status_pub.publish(String(data=self.guard.status(now_s)))
 
     def health(self):
         if self.guard.state is State.BLOCKED:
