@@ -9,13 +9,31 @@ Gate 4 pass criteria (from the master plan): position hold within +/- 10 cm for
 Verified from log_2 2026-09-14 parameters. Gate 4 cannot start until these are
 fixed; each is a single parameter.
 
-[ ] KILL SWITCH IS NOT ASSIGNED. RC_MAP_KILL_SW = 0 (Unassigned). Assign a
-    channel, then test it: disarmed bench spin, flip kill, motors must stop
-    immediately. Nothing else on this list matters without it.
+    RC channel map (log_3, 2026-09-14; RC_CHAN_CNT 8): RC1-4 sticks,
+    RC5 = arm switch (RC_MAP_ARM_SW), RC6 = UNASSIGNED, RC7 = flight-mode
+    switch (RC_MAP_FLTMODE), RC8 = Offboard switch (RC_MAP_OFFB_SW).
+    RC5-8 MIN/MAX/TRIM are exactly 1000/2000/1500, i.e. defaults - check in QGC
+    that the radio is calibrated and each switch position crosses PX4's
+    thresholds.
+[ ] KILL SWITCH: ASSIGNED 2026-10-13 (RC_MAP_KILL_SW 6), TEST OUTSTANDING.
+    RC_KILLSWITCH_TH 0.750 = kill when RC6 is ABOVE ~1750 us; if the kill
+    position sends the low end, set it to -0.750. RC6 calibration is still the
+    default 1000/2000/1500, so confirm in QGC's Radio page that the kill
+    position crosses the threshold. COM_KILL_DISARM 5 s: motors stop at once
+    but the vehicle stays ARMED for 5 s, and releasing the switch inside that
+    window lets the motors spin up again - hold the kill, or disarm.
+    MAN_KILL_GEST_T -1 (stick gesture off).
+    Test, props off: arm on RC5, kill on RC6 -> motors stop instantly; hold ->
+    auto-disarm after 5 s; then repeat releasing at ~2 s to see the restart on
+    the bench rather than in the air. Nothing else on this list matters
+    without it.
 [ ] POSITION MODE IS NOT ON THE SWITCH. COM_FLTMODE1 = 8 (Stabilized),
     COM_FLTMODE4 = 1 (Altitude), COM_FLTMODE6 = 4 (Hold); slots 2, 3, 5
-    unassigned. Position is mode 2 and is assigned to no slot, yet the gate is
-    flown in POSITION. Assign it and confirm the switch position on the bench.
+    unassigned - the pattern of a 3-position switch on RC7, which reaches
+    slots 1, 4 and 6. Position is mode 2 and on no slot, yet the gate is flown
+    in POSITION. Put it on one of the three reachable slots (Hold in slot 6 is
+    the natural one to replace: indoors it depends on the same position
+    estimate as Position) and confirm each switch position on the bench.
 [ ] GEOFENCE IS OFF. GF_ACTION = 0 (None), GF_MAX_HOR_DIST = 0,
     GF_MAX_VER_DIST = 0. Containment is the geofence's job, not the EV guard's
     (px4_odom_bridge_ev_guard_spec.md section 9.1). Size it with the test volume
@@ -57,7 +75,7 @@ fixed; each is a single parameter.
     live plausible data. 2026-09-14: rangefinder confirmed 100 Hz (uorb top),
     single downward instance, EKF2_RNG_POS_* set.
 [ ] EV guard live: /px4_odom_bridge/status reports FORWARDING with zero
-    rejections before arming. A BLOCKED guard means no EV reaches PX4 (VD-011).
+    rejections before arming (STALE means LIO has gone silent). A BLOCKED guard means no EV reaches PX4 (VD-011).
     Radius is 20 m from the LIO origin - confirm the test volume fits inside it.
 
 =========================== D. BEFORE THE FIRST SPIN ===========================
@@ -75,9 +93,9 @@ fixed; each is a single parameter.
 
 =========================== E. DURING THE HOVER ===========================
 [ ] Pilot's hand on the kill switch for the whole flight.
-[ ] Watch /px4_odom_bridge/status. FORWARDING with a rising count is healthy;
-    BLOCKED means EV has stopped permanently and will not resume without a
-    restart - land. Known PX4 response to EV loss: COM_POSCTL_NAVL = 0, so it
+[ ] Watch /px4_odom_bridge/status. FORWARDING is healthy. STALE means no LIO
+    sample for over 1 s, so EV has stopped reaching PX4 - land. BLOCKED means EV
+    has stopped permanently and will not resume without a restart - land. Known PX4 response to EV loss: COM_POSCTL_NAVL = 0, so it
     falls back to Altitude/Manual, keeping height on baro and range. That
     fallback is why EKF2_RNG_CTRL stays 1.
 [ ] Watch for EKF resets. The pass criterion is zero; the 2026-09-14 incident
