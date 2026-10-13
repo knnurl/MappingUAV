@@ -1,25 +1,102 @@
 # filepath: docs/gate4_prep_checklist.txt
-Preconditions, all verified and logged before first tethered spin-up:
+Gate 4: first tethered hover. Human pilot in the loop, agent never touches the
+vehicle. Every [ ] below is operator-executed.
 
-[ ] Gates 1-3 formally passed and their transcripts stored in docs/.
-[ ] gate3_ekf2.params re-read back from the FC and diffed against the file
-    (params can silently fail to save before a reboot).
+Gate 4 pass criteria (from the master plan): position hold within +/- 10 cm for
+2 continuous minutes, zero EKF resets, no LIO degradation events in the log.
+
+=========================== A. BLOCKERS ===========================
+Verified from log_2 2026-09-14 parameters. Gate 4 cannot start until these are
+fixed; each is a single parameter.
+
+[ ] KILL SWITCH IS NOT ASSIGNED. RC_MAP_KILL_SW = 0 (Unassigned). Assign a
+    channel, then test it: disarmed bench spin, flip kill, motors must stop
+    immediately. Nothing else on this list matters without it.
+[ ] POSITION MODE IS NOT ON THE SWITCH. COM_FLTMODE1 = 8 (Stabilized),
+    COM_FLTMODE4 = 1 (Altitude), COM_FLTMODE6 = 4 (Hold); slots 2, 3, 5
+    unassigned. Position is mode 2 and is assigned to no slot, yet the gate is
+    flown in POSITION. Assign it and confirm the switch position on the bench.
+[ ] GEOFENCE IS OFF. GF_ACTION = 0 (None), GF_MAX_HOR_DIST = 0,
+    GF_MAX_VER_DIST = 0. Containment is the geofence's job, not the EV guard's
+    (px4_odom_bridge_ev_guard_spec.md section 9.1). Size it with the test volume
+    and set an action before flying.
+
+=========================== B. HARDWARE ===========================
+[ ] LIDAR POWER AND CABLING. This is the root cause of the 2026-09-14 divergence
+    incident (gate3 section 10): a power cutoff corrupted FAST-LIO. Re-do the
+    connector and strain relief before anything spins.
 [ ] Mid-360 on foam standoffs; wiring strain-relieved; nothing enters the
     lidar's blind radius when arms flex.
-[ ] Props balanced and correct rotation; motors mapped (Actuators test in QGC, props OFF first).
-[ ] Kill switch assigned and tested: RC kill -> immediate motor stop, while disarmed-bench-spinning.
-[ ] Vibration re-check WITH props at hover throttle on the tether:
-    fly nothing, just spin at low throttle strapped down, pull the log,
-    Flight Review vibration metrics in the green band. If not, LIO health under
-    vibration must be re-verified (repeat Gate 2 checks with motors running).
-[ ] Flow/range sanity: listener distance_sensor and listener optical_flow (or
-    sensor_optical_flow, [VERIFY] per firmware) show live plausible data.
+[ ] Props balanced and correct rotation; motors mapped (Actuators test in QGC,
+    props OFF first).
 [ ] Tether anchored below and clear of props; test volume >= 3 x 3 x 2.5 m clear.
-[ ] Flight mode POSITION, MPC limits confirmed active (attempt aggressive stick
-    input on the bench, observe setpoint clamps in the log).
-[ ] Recording policy in force: rosbag limited to /Odometry and
-    /fmu/out/vehicle_odometry; PX4 .ulg logging enabled (that is the primary record).
+[ ] Gate 2 room-perimeter walk loop, deferred on 2026-09-14 pending this cabling
+    rework (gate2 transcript). Closes the last Gate 2 item.
 
-Gate 4 pass criteria (human pilot in the loop, from the master plan):
-position hold within +/- 10 cm for 2 continuous minutes, zero EKF resets,
-no LIO degradation events in the log.
+=========================== C. ESTIMATOR SETUP ===========================
+[ ] Gates 1-3 formally passed and their transcripts stored in docs/.
+    (Gate 3: operator called PASS 2026-09-14.)
+[ ] gate3_ekf2.params re-read back from the FC and diffed against the file
+    (params can silently fail to save before a reboot). Confirm EKF2_EV_POS_Z
+    = -0.047 and EKF2_RNG_POS_* survive the reboot.
+[ ] YAW TEST (gate3 open item 2, never run): rotate 90 deg clockwise, confirm
+    heading rises by ~pi/2 and settles. The one axis never directly exercised,
+    and the axis a frame-convention error hides in.
+[ ] HEIGHT PATH DECIDED (gate3 open item 10, section 11). Inside the hover
+    envelope (<5 m, <1 m/s) three things engage that no bench test exercised:
+    conditional range aid, MPC_ALT_MODE 2 terrain hold, and the terrain
+    estimator. Decided so far: EKF2_RNG_CTRL stays 1, because range is the only
+    height source independent of LIO. MPC_ALT_MODE 2 is still an open choice -
+    its failure mode is climbing when something passes under the vehicle.
+[ ] OPTICAL FLOW ASSESSED (gate3 open item 11, never assessed anywhere).
+    EKF2_OF_CTRL = 1 and flow was fused 99% of the last session. With
+    EKF2_EV_CTRL 11 supplying no EV velocity, flow is a primary velocity aiding
+    source. EKF2_OF_QMIN_GND = 0 accepts any quality on the ground. Decide
+    deliberately whether it stays on, and watch its innovations in the log.
+[ ] Flow/range sanity: listener distance_sensor and listener optical_flow show
+    live plausible data. 2026-09-14: rangefinder confirmed 100 Hz (uorb top),
+    single downward instance, EKF2_RNG_POS_* set.
+[ ] EV guard live: /px4_odom_bridge/status reports FORWARDING with zero
+    rejections before arming. A BLOCKED guard means no EV reaches PX4 (VD-011).
+    Radius is 20 m from the LIO origin - confirm the test volume fits inside it.
+
+=========================== D. BEFORE THE FIRST SPIN ===========================
+[ ] Vibration re-check WITH props at hover throttle on the tether: fly nothing,
+    just spin at low throttle strapped down, pull the log, Flight Review
+    vibration metrics in the green band. If not, LIO health under vibration must
+    be re-verified (repeat Gate 2 checks with motors running).
+[ ] MPC limits confirmed active: attempt aggressive stick input on the bench,
+    observe setpoint clamps in the log. Current limits: MPC_XY_VEL_MAX 1.0,
+    MPC_Z_VEL_MAX_UP/DN 0.5, MPC_TILTMAX_AIR 20 deg, MPC_THR_HOVER 0.62.
+[ ] Recording policy in force: rosbag limited to /Odometry and
+    /fmu/out/vehicle_odometry; PX4 .ulg logging enabled (that is the primary
+    record). SDLOG_MODE 1, SDLOG_PROFILE 129 (or 131 if the EV motion test is
+    being run in the same session).
+
+=========================== E. DURING THE HOVER ===========================
+[ ] Pilot's hand on the kill switch for the whole flight.
+[ ] Watch /px4_odom_bridge/status. FORWARDING with a rising count is healthy;
+    BLOCKED means EV has stopped permanently and will not resume without a
+    restart - land. Known PX4 response to EV loss: COM_POSCTL_NAVL = 0, so it
+    falls back to Altitude/Manual, keeping height on baro and range. That
+    fallback is why EKF2_RNG_CTRL stays 1.
+[ ] Watch for EKF resets. The pass criterion is zero; the 2026-09-14 incident
+    produced 123 reset_pos_to_vision events in one session.
+[ ] Abort conditions, agreed before arming: any EKF reset, any BLOCKED guard,
+    any unexpected climb (terrain hold), any LIO degradation message.
+
+=========================== F. AFTER ===========================
+[ ] Pull the .ulg and the rosbag; write docs/gate4_verification_<date>.md with
+    the same structure as the Gate 3 transcript.
+[ ] Check EV innovations and, if the motion test was run, resolve EKF2_EV_DELAY
+    (gate3 section 12 has the procedure and the analysis method).
+[ ] Close or restate VD-011 with what the flight actually demonstrated.
+
+=========================== DEFERRED, NOT GATE 4 ===========================
+- EKF2_EV_DELAY stays 5.0 ms: under 1.5 cm of error at Gate 4 hover speeds.
+  Resolve via the motion test before Gate 5 (gate3 section 13 / TODO).
+- EV guard redesign: radius rule is a geofence not a divergence detector; step
+  rule's speed limit scales with LIO rate; real drift detection needs the
+  Pixhawk IMU and the Benewake with tilt protection
+  (px4_odom_bridge_ev_guard_spec.md section 9).
+- Ground-station WiFi roaming breaks CycloneDDS mid-session.
