@@ -27,7 +27,9 @@ fixed; each is a single parameter.
     auto-disarm after 5 s; then repeat releasing at ~2 s to see the restart on
     the bench rather than in the air. Nothing else on this list matters
     without it.
-[ ] POSITION MODE IS NOT ON THE SWITCH. COM_FLTMODE1 = 8 (Stabilized),
+[x] DONE 2026-10-13: RC7 ladder set - low Stabilized (slot 1), middle Altitude
+    (slot 4), high Position (slot 6). Confirm each position in QGC on the bench.
+    Original finding: POSITION MODE IS NOT ON THE SWITCH. COM_FLTMODE1 = 8 (Stabilized),
     COM_FLTMODE4 = 1 (Altitude), COM_FLTMODE6 = 4 (Hold); slots 2, 3, 5
     unassigned - the pattern of a 3-position switch on RC7, which reaches
     slots 1, 4 and 6. Position is mode 2 and on no slot, yet the gate is flown
@@ -38,6 +40,23 @@ fixed; each is a single parameter.
     GF_MAX_VER_DIST = 0. Containment is the geofence's job, not the EV guard's
     (px4_odom_bridge_ev_guard_spec.md section 9.1). Size it with the test volume
     and set an action before flying.
+
+[ ] FOREIGN AUTOPILOT ON THE RADIO LINK (log_4, 2026-10-13). The SiK radio on
+    TELEM1 (MAV_0_CONFIG 101) is linked to a radio attached to a powered
+    ArduPilot flight controller that ALSO uses system ID 1. Its pre-arm text
+    ("3D Accel calibration needed", "Compass not calibrated", ...) lands in
+    this vehicle's log, and with MAV_0_FORWARD 1 QGC's commands to system 1 can
+    reach it. Find the far end and power it off, or give this radio pair its
+    own NETID; if the radio is not used for this project, MAV_0_CONFIG 0.
+    Do not fix it by changing MAV_SYS_ID casually: the AS2 platform config
+    targets system 1 (platform_pixhawk.yaml target_system_id).
+[ ] PX4's OWN pre-arm state: pre_flight_checks_pass false only because the
+    transmitter was off (manual_control_signal_lost) and the safety button was
+    not pressed (CBRK_IO_SAFETY 0). Accelerometer and compass are fine - the
+    calibration messages came from the other autopilot.
+[ ] LOGGING: SDLOG_MODE is 0 (armed only) - it reverted from the 1 set on
+    2026-09-14. Set SDLOG_MODE 2 (boot until shutdown) for bench sessions so
+    events before arming are captured.
 
 =========================== B. HARDWARE ===========================
 [ ] LIDAR POWER AND CABLING. This is the root cause of the 2026-09-14 divergence
@@ -66,7 +85,12 @@ fixed; each is a single parameter.
     estimator. Decided so far: EKF2_RNG_CTRL stays 1, because range is the only
     height source independent of LIO. MPC_ALT_MODE 2 is still an open choice -
     its failure mode is climbing when something passes under the vehicle.
-[ ] OPTICAL FLOW ASSESSED (gate3 open item 11, never assessed anywhere).
+[ ] OPTICAL FLOW: DISABLED 2026-10-13 (EKF2_OF_CTRL 0) after an A/B showed it
+    caused 28-35 cm excursions and a reset during motion (gate3 section 14).
+    Consequence: no velocity aiding besides EV position, so on EV loss EKF2
+    dead-reckons at once and PX4 falls back to Altitude. Before re-enabling:
+    measure the HereFlow mounting and set SENS_FLOW_ROT (still default 0).
+    Original note: OPTICAL FLOW ASSESSED (gate3 open item 11, never assessed anywhere).
     EKF2_OF_CTRL = 1 and flow was fused 99% of the last session. With
     EKF2_EV_CTRL 11 supplying no EV velocity, flow is a primary velocity aiding
     source. EKF2_OF_QMIN_GND = 0 accepts any quality on the ground. Decide
