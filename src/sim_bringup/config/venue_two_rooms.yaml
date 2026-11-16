@@ -1,0 +1,16 @@
+# filepath: src/sim_bringup/config/venue_two_rooms.yaml
+# The rig's "two_rooms" world in the form of drone_bringup/config/venue.yaml.
+# sim.launch.py derives every box from it with scripts/venue_boxes.py logic.
+venue:
+  x_min: -1.8
+  x_max: 7.6
+  y_min: -2.0
+  y_max: 2.0
+  floor_z: -0.25
+  ceiling_z: 2.75
+margins:
+  wall_m: 0.3
+  ceiling_m: 0.5
+  soft_m: 0.3
+  map_pad_m: 1.0
+z_fly: 1.3

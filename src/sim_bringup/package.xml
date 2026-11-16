@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- filepath: src/sim_bringup/package.xml -->
+<package format="3">
+  <name>sim_bringup</name>
+  <version>0.1.0</version>
+  <description>Closed-loop rig: kinematic fake PX4 and raycast LiDAR world for exercising the autonomy stack without a vehicle. Not a flight simulator.</description>
+  <maintainer email="k.ural1@salford.ac.uk">kaan</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>px4_msgs</depend>
+  <depend>as2_msgs</depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <test_depend>python3-pytest</test_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

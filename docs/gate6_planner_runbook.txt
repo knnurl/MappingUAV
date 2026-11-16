@@ -1,0 +1,161 @@
+# filepath: docs/gate6_planner_runbook.txt
+# Gate 6 (gate6_planner_in_loop): map and planner in the loop on the vehicle.
+# WP-C + WP-D deliverable. HUMAN-EXECUTED ONLY. The agent may parse the records
+# afterwards. Only the operator writes docs/gate_status.yaml and closes debt.
+#
+# Written 2026-11-16 against wp-h-sim (planner design B: grid path on the
+# map_interface slice, flown by Aerostack2 FollowPath). EGO-Planner is not
+# used at this gate.
+
+==========================================================================
+PAGE 1: READ FIRST
+==========================================================================
+TOKENS REQUIRED
+[ ] gate5_as2_behaviors: CONFIRMED
+[ ] gate6_debt_review:   CONFIRMED (operator has read this page)
+[ ] decision_dp1_mapping: CPU_GRID (recorded)
+
+OPEN VERIFICATION DEBT TOUCHING THIS GATE
+VD-006  wp-d  Planner closed loop never run on Aerostack2 + PX4.
+        Discharged by: Parts C and D.
+VD-002  wp-c  Map never checked against real Mid-360 clouds at known
+        distances. Discharged by: Part B.
+VD-013  wp-c  Map saver cost alongside the flight stack; chunk integrity
+        after a power cut. Discharged by: B4 and E2.
+VD-008  wp-f  Map query latency on real data. Discharged by: B3.
+OI-4 / OI-5 (explorer spec): hover consumer and goal yaw. Answered here by
+        D3 and D1.
+
+WHAT THE RIG ALREADY SHOWED (2026-11-16, no flight dynamics, discharges nothing)
+  The action is /drone0/FollowPathBehavior, it accepts frame "earth", and a
+  cancelled behaviour leaves the vehicle holding (4 cm drift in 5 s).
+  Gate 6 exists to see the same three things on the vehicle.
+
+LIMITS OF THIS PLANNER (know them before flying it)
+  L1  Static scenes only. It re-checks the path once per second against a map
+      updated twice per second. Nothing reacts faster. NOBODY walks into the
+      volume during a run.
+  L2  It flies only through cells the LiDAR has SEEN free, with 0.4 m
+      clearance. A goal in unseen space is refused ("goal FAILED: goal cell is
+      not observed free"). That is correct behaviour.
+  L3  Glass is invisible to the LiDAR. Keep glazing outside the geofence.
+  L4  After ANY Offboard exit the platform forwards nothing until T3 is
+      restarted; the planner then refuses goals ("not in Offboard").
+  L5  Path tracking error is unmeasured (D2). The clearance is 0.4 m from the
+      vehicle CENTRE on a 0.2 m grid: real margin to a wall can be ~0.3 m.
+
+STOP CONDITIONS: all of Gate 5's, plus
+  - the vehicle passes closer to an obstacle than planned, or cuts a corner;
+  - "path blocked" with nobody in the volume (map or drift problem);
+  - /go_to_with_avoidance/status FAILED with a reason not caused on purpose.
+  Pilot action is unchanged: flip to POSITION; if in doubt, KILL.
+
+==========================================================================
+PART A: SOFTWARE (agent prepares, operator ticks)
+==========================================================================
+[ ] A1 wp-c-mapping and wp-f-frontier (planner) merged per the token; build
+       clean; tests: map_interface 20 gtests + 5 replay, planner_shim 62,
+       geofence_watchdog 73.
+[ ] A2 Room measured and written into config/venue.yaml;
+       python3 scripts/venue_boxes.py --write   (prints the boxes; exit 0)
+       Values: map x[__,__] y[__,__]  plan x[__,__] y[__,__] z[__,__]
+[ ] A3 Rig rehearsal on this build, vehicle disconnected or powered off:
+       sim_mission --no-explore and all four sim_scenarios pass
+       (src/sim_bringup/README.md).
+[ ] A4 fast_lio config: scan_publish_en true (the map needs
+       /cloud_registered). pcd_save_en false.
+
+==========================================================================
+PART B: MAP ON REAL DATA (props OFF, hand-carried, FC powered)
+==========================================================================
+Terminals as in the Gate 5 runbook (U1 device). In addition:
+T5  ros2 launch drone_bringup exploration.launch.py explorer:=false \
+      venue_params:=$HOME/colcon_ws/src/drone_bringup/config/venue_params.yaml
+B1  Vehicle on the mark, 60 s settle. Place two obstacles (boxes, >= 0.5 m
+    wide, >= 1.5 m tall) at measured positions; measure two walls from the
+    mark with a tape. Write the four positions down BEFORE looking at the map.
+B2  Carry the vehicle slowly round the room at ~1.3 m, back to the mark.
+    Ground station: view /map_interface/occupied_cells (never RViz on the
+    vehicle). EXPECT walls and both obstacles within one cell (0.2 m) of the
+    taped positions; free space in the middle; no "ghost" wall where you
+    walked (stand behind the vehicle, not beside it: L1).
+B3  ros2 topic echo /go_to_with_avoidance/status   (state IDLE)
+    python3 tools/frontier_prototype/bench_query.py   -> record the latencies.
+    EXPECT a 46 x 46 slice under 100 ms.
+B4  Map saver: ls ~/map_exports/session_*/ ; cat .../manifest.txt
+    EXPECT a new chunk about every 20 s while moving. top: record CPU of
+    map_server_node, map_saver_node, laserMapping, livox driver.
+    EXPECT the sum of map + planner + AS2 inside 2.0 cores / 2.5 GB.
+B5  Disk: du -sh the session; EXPECT a few MB.
+
+==========================================================================
+PART C: PLANNER, PROPS OFF
+==========================================================================
+C1  Pre-flight check: python3 scripts/preflight_check.py --as2 --mapping
+    EXPECT all PASS except "battery" if on bench supply.
+C2  Refusals, disarmed, vehicle on the mark (nothing can move: not FLYING).
+    Send a goal 2 m ahead:
+      ros2 topic pub --once /go_to_with_avoidance/goal geometry_msgs/msg/PoseStamped \
+        "{header: {frame_id: odom}, pose: {position: {x: 2.0, y: 0.0, z: 1.3}, orientation: {w: 1.0}}}"
+    EXPECT alert "goal REJECTED: platform is not in Offboard ...".
+    Send x: 99.0. EXPECT "goal REJECTED: goal (99.00,...) outside planning box".
+C3  ros2 node info /go_to_with_avoidance : EXPECT no /fmu topic at all.
+
+==========================================================================
+PART D: PROPS ON, TETHERED (tether long enough for the D1 goal)
+==========================================================================
+BEFORE EVERY FLIGHT: Gate 5 "before every flight" list; T3 and T5 freshly
+restarted; preflight_check --as2 --mapping all PASS; logging running.
+Take off with the Gate 5 D1 action to 1.3 m. Wait 10 s (map fills).
+
+D1  One goal in free space, 2 m ahead (the C2 command).
+    EXPECT status PLANNING -> EXECUTING -> REACHED; the vehicle flies FORWARD
+    about 2 m at ~0.5 m/s and stops; heading unchanged (KEEP_YAW; closes
+    OI-5). Any other direction: pilot takes over, STOP (frame error).
+D2  Tracking: goal back to x 0. From the bag afterwards: largest sideways
+    distance between /drone0/self_localization/pose and the straight line.
+    Record it. Above 0.20 m: do not go to D4; tune first.
+D3  Cancel and hold: send the D1 goal; when the vehicle is about half way:
+      ros2 topic pub --once /geofence/hover_request std_msgs/msg/Empty
+    EXPECT alert "STOPPED: hover requested ...", the vehicle stops within
+    ~0.5 m and HOLDS for 30 s (drift under 0.15 m), PX4 still in Offboard.
+    If it does not hold: pilot takes over, STOP. The planner then needs
+    another stop mechanism before any further gate (closes OI-4).
+D4  Obstacle: one box on the straight line between the mark and a goal 3 m
+    ahead, placed BEFORE take-off so the map has it. Send the goal.
+    EXPECT a path round the box with visible clearance on the chosen side.
+D5  Unseen goal: a goal behind the box's shadow or beyond a closed door.
+    EXPECT "goal FAILED: ... not observed free" or "no path", no motion.
+D6  Takeover: during a D1 flight the pilot flips to POSITION.
+    EXPECT the vehicle holds in POSITION, T3 logs "AS2 commands disabled",
+    planner status FAILED "platform is not in Offboard". Land. Restart T3.
+D7  LIO health: only if D1-D6 were clean. With the vehicle hovering after a
+    REACHED, a helper walks briskly across the room 3 m away.
+    Record /lio_health/state and the bridge status. No pass criterion: this
+    measures how the estimate reacts to a person (Gate 2 saw decimetres).
+Land with the Gate 5 land action after each flight.
+
+==========================================================================
+PART E: AFTER
+==========================================================================
+E1  Copy ~/map_exports/session_* off the vehicle; open the chunks together
+    (CloudCompare or pcl_viewer on the ground station). EXPECT a recognisable
+    room. Keep the octree (.bt) if autosave_path was set.
+E2  Power-cut check for VD-013, props OFF: with the map saver running, pull
+    the Jetson's power once. After reboot every chunk_*.pcd in that session
+    must open; a missing last chunk is acceptable, a broken one is not.
+
+PASS CRITERIA (proposed; the operator decides)
+P1  B2: walls and obstacles within 0.2 m of the taped positions.
+P2  D1 and D2: three goals reached in the commanded direction; tracking
+    error recorded and under 0.20 m.
+P3  D3: stop and 30 s hold after a hover request.
+P4  D4: path round the obstacle; closest approach recorded.
+P5  D5, D6: refusal without motion; clean takeover.
+P6  Across Part D: zero EKF resets, zero watchdog alerts, compute inside the
+    ceiling (B4 numbers).
+
+RECORDS: docs/gate6_verification_<date>.md with the A2 boxes, B1 taped
+positions against the map, B3/B4 numbers, every D result with bag and .ulg
+names, and which of VD-002, VD-006, VD-008, VD-013, OI-4, OI-5 the evidence
+supports closing.

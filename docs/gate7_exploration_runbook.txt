@@ -1,0 +1,153 @@
+# filepath: docs/gate7_exploration_runbook.txt
+# Gate 7 (gate7_exploration): autonomous exploration inside the geofence.
+# WP-F deliverable. HUMAN-EXECUTED ONLY. Only the operator writes
+# docs/gate_status.yaml and closes verification debt.
+#
+# Written 2026-11-16 against wp-h-sim. Companion:
+# docs/gate7_watchdog_trip_runbook.txt, which is the ENTRY criterion and is
+# done first.
+
+==========================================================================
+PAGE 1: READ FIRST
+==========================================================================
+TOKENS REQUIRED
+[ ] gate6_planner_in_loop: CONFIRMED
+[ ] gate7_debt_review:     CONFIRMED
+[ ] Watchdog trip runbook tests A-E passed THIS build (entry criterion).
+
+OPEN VERIFICATION DEBT TOUCHING THIS GATE
+VD-007  Explorer closed loop on the vehicle (arrival, no-progress, timeout,
+        hold goal, battery return). Discharged by: Parts C and D.
+VD-009  Frame-divergence threshold untuned (0.5 m). Discharged by: B2.
+VD-012  Battery topic. Must already be closed at Gate 5 (runbook U5).
+
+WHAT THE EXPLORER DOES
+  It picks the next viewpoint that shows the most unknown space at ONE
+  altitude (z_fly), sends it to the planner, and repeats until nothing
+  unknown is reachable. It never arms, takes off, lands or changes mode: the
+  pilot or Aerostack2 does. At the end it HOLDS (on_done: hold) and waits to
+  be landed. It stops by itself (PAUSED, no goals) when: the pilot takes over,
+  LIO degrades, the watchdog or the odometry bridge reports trouble, the map
+  stops answering, or the estimate and LIO disagree. Low battery ends the
+  mission and flies back to the start point.
+
+HAZARDS SPECIFIC TO EXPLORATION
+  H1  It goes where it has never been. Walk the whole fenced volume first:
+      no glass, no mirrors, no hanging cables, no thin poles (anything thinner
+      than ~5 cm may not be in a 0.2 m map), doors fixed open or shut.
+  H2  Nobody inside the volume. A person both blocks paths and pulls the LIO
+      estimate (Gate 2). Spotters stand outside the geofence.
+  H3  It will fly out of the pilot's direct line of sight if the volume has
+      more than one room. First flights: ONE room, door shut (Part C).
+  H4  Single altitude. It does not look under tables or over cabinets, and it
+      treats space it has not seen as not flyable.
+  H5  Battery. Plan each run to end above 40%. The interlock is at 25%.
+  H6  After any pause caused by a takeover, restart T3 (Aerostack2) before
+      "resume" (the platform forwards nothing after an Offboard exit).
+
+ABORT: Gate 5/6 stop conditions, plus
+  - a goal outside what you believe is free space;
+  - two goals in a row that fail ("goal dropped");
+  - the vehicle out of sight for more than a few seconds (multi-room runs
+    need a second pilot-side observer with a live view).
+  Pilot action: ros2 service call /frontier_explorer/pause is NOT the abort.
+  The abort is the RC: POSITION, or KILL.
+
+==========================================================================
+PART A: SOFTWARE AND VENUE (agent prepares, operator ticks)
+==========================================================================
+[ ] A1 All branches merged per tokens; build clean; tests: frontier_explorer
+       186, planner_shim 62, geofence_watchdog 73, map_interface 20 + 5.
+[ ] A2 Venue measured -> config/venue.yaml -> scripts/venue_boxes.py --write.
+       The script must exit 0. Record the planning box and z_fly.
+[ ] A3 Rig rehearsal on this build with the vehicle off: sim_mission passes
+       (full mission), all four sim_scenarios pass.
+[ ] A4 frontier_explorer.yaml reviewed: max_mission_s for the first runs
+       300; battery_min_fraction 0.25; on_done hold.
+[ ] A5 Ground station can see /frontier_explorer/status and
+       /map_interface/occupied_cells over the network; a second person
+       watches them.
+
+==========================================================================
+PART B: PROPS OFF, HAND-CARRIED
+==========================================================================
+Stack: ros2 launch drone_bringup flight.launch.py as2:=true mapping:=true \
+         explorer:=true serial_dev:=<FTDI device>
+B1  python3 scripts/preflight_check.py --as2 --mapping --explorer
+    EXPECT all PASS.
+B2  Frame check (VD-009). Carry the vehicle round the room at walking pace
+    for 2 minutes. ros2 topic echo /frontier_explorer/status --field data
+    and note "frame_diff_m" every few seconds; record the largest value.
+    Set frame_divergence_max_m to that value + 0.15 m (not below 0.25).
+B3  Start must be refused on the ground:
+      ros2 service call /frontier_explorer/start std_srvs/srv/Trigger
+    EXPECT success: false, message naming "P2 platform not ... FLYING".
+B4  Deliberate config error: start T5 with a planner box 1 m smaller.
+    EXPECT start refused with "C2". Restore.
+
+==========================================================================
+PART C: ONE ROOM, TETHERED, PROPS ON
+==========================================================================
+BEFORE EVERY FLIGHT: Gate 5 list; stack freshly started on the mark; 60 s
+settle; preflight all PASS; flight_log_session.sh running; battery > 80%.
+Take off with the Gate 5 takeoff action to z_fly. Wait 10 s.
+
+C1  First mission, door shut, max_mission_s 300:
+      ros2 service call /frontier_explorer/start std_srvs/srv/Trigger
+    EXPECT WAIT_MAP -> SELECTING -> NAVIGATING; each goal visible in
+    /frontier_explorer/status BEFORE the vehicle moves; goals only inside the
+    room; at the end "DONE: COMPLETE" and the vehicle holding.
+    Land with the Gate 5 land action.
+    A room fully visible from the start gives DONE with no goal at all:
+    that is correct. Put one large box in the room to create a frontier.
+C2  Pause and resume in flight: during NAVIGATING
+      ros2 service call /frontier_explorer/pause std_srvs/srv/Trigger
+    EXPECT the vehicle stops and holds; state PAUSED: OPERATOR. Then
+    .../resume. EXPECT it continues with a new goal.
+C3  Takeover: during NAVIGATING the pilot flips to POSITION.
+    EXPECT explorer PAUSED: I2, no further goals, the vehicle holding in
+    POSITION. Land. (H6: restart before the next run.)
+C4  Stop: during NAVIGATING .../stop. EXPECT IDLE and a hold.
+C5  Blocked goal: after DONE in C1, repeat with a box moved to where the
+    first goal was. EXPECT a different goal or "goal dropped" then another
+    goal; never contact.
+C6  Low battery (only if C1-C5 were clean): set battery_min_fraction to a
+    value the battery will cross within the flight (for example current
+    reading minus 5 points). EXPECT "DONE: BATTERY" and the vehicle flying
+    back to the take-off point and holding. Land. Restore 0.25.
+
+==========================================================================
+PART D: TWO ROOMS (free flight, operator decision required)
+==========================================================================
+Only after Part C passed twice and the operator decides to remove the tether.
+D1  Geofence covers both rooms and the door; walked per H1; observer in the
+    second room outside the fence line, with an RC-range check done there.
+D2  Mission with max_mission_s 600. EXPECT the vehicle to pass the door
+    (the map must show it at least 1.0 m wide; 0.8 m is the practical limit
+    of this planner), explore the second room, and report DONE: COMPLETE with
+    "unexplored_clusters": [].
+D3  Narrow door (0.6-0.8 m): EXPECT either a tight-tier goal or DONE with
+    unexplored clusters listed. Both are acceptable; contact is not.
+
+==========================================================================
+PART E: THE MAP (the mission's product)
+==========================================================================
+E1  ~/map_exports/session_<time>/chunk_*.pcd and manifest.txt exist; copy
+    them off (scripts/map_sync.sh <destination> can do it during the flight).
+E2  Merge and view on the ground station. Compare three taped distances
+    (two wall-to-wall, one floor-to-ceiling) with the cloud. Record the
+    differences.
+
+PASS CRITERIA (proposed; the operator decides)
+P1  C1: three missions in a row end DONE: COMPLETE with no abort.
+P2  C2-C4: every pause, takeover and stop left the vehicle holding.
+P3  C6: battery return worked.
+P4  Zero EKF resets, zero watchdog land actions, zero contacts.
+P5  E2: map distances within 0.10 m of the tape.
+P6  (free flight) D2 complete with no unexplored cluster.
+
+RECORDS: docs/gate7_verification_<date>.md: venue boxes, B2 frame numbers,
+per mission the goal list from the status topic, duration, battery used,
+area covered ("known_free_m2"), aborts and causes, map comparison, compute
+(CPU and RSS of explorer, planner, map server, map saver), and which of
+VD-007, VD-009 the evidence supports closing.

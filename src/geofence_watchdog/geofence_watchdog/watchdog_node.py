@@ -168,10 +168,16 @@ class GeofenceWatchdog(Node):
                       f'bridge_bad={bridge_bad} (state={self.bridge_state}) '
                       f'armed={self.armed} pos={self.pos}')
             self.alert_pub.publish(String(data=f'{action.name}: {reason}'))
-            log = (self.get_logger().error if action == Action.LAND
-                   else self.get_logger().warn if action == Action.ALERT_HOVER
-                   else self.get_logger().info)
-            log(f'geofence action {action.name}: {reason}')
+            # One call site per severity: rclpy raises if a single call site
+            # changes severity, which killed this node on SOFT -> HARD (found
+            # in the closed-loop rig, 2026-11-16).
+            text = f'geofence action {action.name}: {reason}'
+            if action == Action.LAND:
+                self.get_logger().error(text)
+            elif action == Action.ALERT_HOVER:
+                self.get_logger().warn(text)
+            else:
+                self.get_logger().info(text)
             self.last_action = action
 
         if action == Action.ALERT_HOVER:

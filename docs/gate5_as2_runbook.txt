@@ -11,6 +11,60 @@
 # of these moved, re-check the cited lines before the session.
 
 ==========================================================================
+UPDATE 2026-11-16: READ WITH PAGE 1 (changes since this runbook was written)
+==========================================================================
+U1  Serial device. The FTDI cable is now
+    /dev/serial/by-id/usb-FTDI_TTL232RG-VSW3V3_FTADW2E6-if00-port0
+    (operator, 2026-10-27). Use it wherever T1 or K3 name the old one. K3 is
+    resolved: drone-xrce-agent.service uses this device.
+
+U2  Watchdog (T2) changed on wp-e-geofence-watchdog:
+    - it sends no land command to a DISARMED vehicle (bench work is quiet);
+    - it repeats NAV_LAND until PX4 reports Land once, then stops for good, so
+      a pilot who flips to POSITION after a watchdog land KEEPS control. The
+      watchdog must then be restarted before the next flight;
+    - it also lands when /px4_odom_bridge/state is STALE, BLOCKED or silent;
+    - a crash on a soft breach followed by a hard breach is fixed (found in
+      the rig). Re-run its tests in A1: 73.
+    C6 addition: ros2 topic echo --once /px4_odom_bridge/state  EXPECT data: 1.
+
+U3  One bringup. `ros2 launch drone_bringup flight.launch.py as2:=true
+    serial_dev:=<U1>` starts T1 + T2 + T3 together with the flight watchdog
+    settings. Because T3 must be restarted between flights (K2) and that
+    restart would also restart perception (new LIO origin, 60 s settle), keep
+    the separate terminals T1/T2/T3 for Parts C and D. Use flight.launch.py
+    for single-flight sessions.
+
+U4  Pre-flight check, before EVERY arming in Part D:
+      python3 ~/colcon_ws/scripts/preflight_check.py --as2
+    EXPECT every line PASS. It is read-only. Any FAIL: do not arm.
+
+U5  New check C7, battery topic (VD-012), props OFF:
+      ros2 topic echo --once /drone0/sensor_measurements/battery
+    EXPECT a sensor_msgs/BatteryState whose percentage is between 0 and 1 and
+    agrees with QGC within a few percent. Record both. The explorer will not
+    start a mission without this topic.
+
+U6  A6 is done: scripts/flight_log_session.sh records 27 topics (list them
+    with --list). It takes ROS_DOMAIN_ID / CYCLONEDDS_URI from the shell.
+
+U7  K5 still holds at Gate 5: nothing consumes /geofence/hover_request until
+    the planner runs (Gate 6). A soft breach is alert-only.
+
+U8  A3 fence sizing: write the room into src/drone_bringup/config/venue.yaml
+    and run `python3 scripts/venue_boxes.py --write`; pass the result to the
+    watchdog (-p or --params-file .../venue_params.yaml). Do not hand-edit
+    geofence.yaml boxes.
+
+U9  Rehearsed in the closed-loop rig on 2026-11-16 (src/sim_bringup, real
+    Aerostack2 against a kinematic fake PX4): offboard-then-arm, takeoff,
+    land, pilot takeover with no setpoint reaching PX4 afterwards. The rig has
+    no flight dynamics and discharges nothing: VD-004, VD-005, VD-010 stay
+    open until Parts C and D are done on the vehicle. One thing it showed and
+    C5 should look for: at an Offboard exit, about one setpoint is already in
+    transit when the platform learns of the exit.
+
+==========================================================================
 PAGE 1: READ BEFORE ANYTHING ELSE
 ==========================================================================
 
