@@ -63,9 +63,11 @@ class LioHealthGuard(Node):
             msg = (f'LIO {state.name}: {self.mon.reason}' if
                    state == LioHealth.DEGRADED else 'LIO recovered')
             self.alert_pub.publish(String(data=msg))
-            log = (self.get_logger().warn if state == LioHealth.DEGRADED
-                   else self.get_logger().info)
-            log(msg)
+            # Two call sites: rclpy refuses one call site that changes severity.
+            if state == LioHealth.DEGRADED:
+                self.get_logger().warn(msg)
+            else:
+                self.get_logger().info(msg)
             self.last_state = state
 
 
