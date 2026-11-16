@@ -8,6 +8,7 @@ log/
 src/px4_msgs/
 src/livox_ros_driver2/
 src/FAST_LIO/
+src/as2_platform_pixhawk/
 src/octomap/
 src/octomap_msgs/
 
@@ -18,6 +19,8 @@ test_data/*
 # python
 __pycache__/
 *.pyc
+.pytest_cache/
+.hypothesis/
 
 # editor/OS noise
 .vscode/
