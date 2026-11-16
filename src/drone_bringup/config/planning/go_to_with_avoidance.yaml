@@ -1,0 +1,27 @@
+# filepath: src/drone_bringup/config/planning/go_to_with_avoidance.yaml
+# WP-D planner (design B): grid path on the map_interface slice, flown by the
+# Aerostack2 FollowPath behaviour. Frame: odom / ENU. The box must equal the
+# explorer's box and sit inside the geofence and the map bounds; generate all
+# of them from config/venue.yaml (scripts/venue_boxes.py) and do not edit one
+# alone.
+go_to_with_avoidance:
+  ros__parameters:
+    x_min: -4.5
+    x_max: 4.5
+    y_min: -4.5
+    y_max: 4.5
+    z_min: 0.2
+    z_max: 2.3
+    obstacle_inflation: 0.4   # m: clearance a path cell needs (X500 radius + margin)
+    resolution: 0.2           # must equal map_interface resolution
+    max_speed: 0.5            # m/s; refused above 1.0
+    start_snap_radius_m: 0.6
+    pose_timeout_s: 0.5
+    lio_heartbeat_timeout_s: 3.0
+    platform_info_timeout_s: 2.0
+    map_query_timeout_s: 1.0
+    map_fail_max: 3
+    max_replans: 3
+    path_check_period_s: 1.0
+    as2_namespace: drone0
+    path_frame_id: earth      # AS2 earth = odom numerically (explorer spec §2.1)

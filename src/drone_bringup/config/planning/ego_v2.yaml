@@ -1,6 +1,6 @@
 # filepath: src/drone_bringup/config/planning/ego_v2.yaml
-# WP-D: EGO planner envelope for the X500 (masterplan §6 values, [FIXED]
-# conservative on purpose; tuning is a human Gate 6 activity).
+# WP-D: EGO planner envelope, kept for the later EGO upgrade. Not used by the
+# current planner (config/planning/go_to_with_avoidance.yaml, design B).
 # Frame [FIXED]: odom / ENU. The planner never consumes NED.
 ego_planner:
   ros__parameters:
