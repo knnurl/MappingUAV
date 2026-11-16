@@ -1,0 +1,12 @@
+# filepath: src/map_interface/srv/QueryMap.srv
+# Advisory occupancy/clearance queries against the coarse global map
+# (odom/ENU frame). NOT the planner's inner-loop map: EGO keeps its own
+# rolling local map (masterplan §5/§6); this answers goal-validation and
+# monitoring questions.
+geometry_msgs/Point[] points
+---
+# per point: 0 = free, 1 = occupied, 2 = unknown
+uint8[] occupancy
+# per point: metres to nearest occupied voxel, clamped at the server's
+# clearance_cap; -1.0 = point outside the mapped bounds
+float32[] clearance

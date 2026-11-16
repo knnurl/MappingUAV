@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<!-- filepath: src/map_interface/package.xml -->
+<package format="3">
+  <name>map_interface</name>
+  <version>0.1.0</version>
+  <description>WP-C mapping abstraction: bounded coarse occupancy + ESDF queries behind a map_backend switch (cpu_grid implemented; nvblox pending DP-1)</description>
+  <maintainer email="k.ural1@salford.ac.uk">kaan</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>octomap</depend>
+  <depend>dynamicEDT3D</depend>
+  <depend>octomap_msgs</depend>
+
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <export><build_type>ament_cmake</build_type></export>
+</package>

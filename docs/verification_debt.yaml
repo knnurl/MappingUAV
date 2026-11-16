@@ -17,3 +17,9 @@ debts:
     original_criterion: "closed-loop planner-to-offboard run (masterplan §6 cap: BUILT_UNVERIFIED)"
     discharge_path: "SITL later, or gate6 integration session; unit-tested pieces (goal/trajectory validity, LIO health) are executed and passing"
     status: OPEN
+  - id: VD-002
+    package: wp-c
+    claim_untested: "map_interface occupancy/ESDF correctness and compute against REAL Mid-360 /cloud_registered data (all current verification uses procedural room+pillar clouds)"
+    original_criterion: "VERIFIED_ON_BAGS once Gate 2/3 bags exist"
+    discharge_path: "record bags per masterplan §5 at Gate 2/3 bench sessions; re-run tools/replay_tests/ with bag playback replacing the synthetic feeder"
+    status: OPEN
