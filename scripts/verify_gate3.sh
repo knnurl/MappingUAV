@@ -16,7 +16,7 @@ rate() {  # rate <seconds> <topic>
   rm -f "$out"
 }
 echo "/fmu/in/vehicle_visual_odometry (expect ~10 Hz):"; rate 15 /fmu/in/vehicle_visual_odometry
-echo "--- EV guard state (expect FORWARDING, rej=0; typed copy: 1 on /px4_odom_bridge/state) ---"
+echo "--- EV guard state (expect FORWARDING, rejected=0; typed copy: 1 on /px4_odom_bridge/state) ---"
 timeout 5 ros2 topic echo --once /px4_odom_bridge/status std_msgs/msg/String 2>/dev/null || echo "  no status in 5 s"
 
 echo "--- sole EV writer (expect 'Publisher count: 1', node px4_odom_bridge) ---"
