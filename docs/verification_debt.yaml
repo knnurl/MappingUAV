@@ -11,13 +11,6 @@ debts:
     original_criterion: "no diverged external-vision sample reaches EKF2 (operator requirement 2026-09-14: safety and reliability are the ultimate criteria)"
     discharge_path: "spec §6 step 6: chain up healthy, confirm /px4_odom_bridge/status reports FORWARDING with the forwarded count rising and zero rejections over 10 min; then, at a time of the operator's choosing, pull LiDAR power deliberately and confirm the guard latches BLOCKED, the bridge stops publishing, and PX4 holds its own estimate. Do this on the bench, props off, before any gate 4 flight."
     status: OPEN
-# - id: VD-001
-#   package: wp-x
-#   claim_untested: "..."
-#   original_criterion: "..."
-#   discharge_path: "..."
-#   status: OPEN
-debts:
   - id: VD-001
     package: wp-g
     claim_untested: "systemd boot ordering (clocks -> xrce -> perception -> autonomy), Restart=on-failure recovery, and journald rate limiting under real boot"
