@@ -1,0 +1,27 @@
+# filepath: src/drone_bringup/config/venue.yaml
+# THE ONE PLACE WHERE THE FLIGHT VOLUME IS DESCRIBED (operator decision D5,
+# 2026-11-16). Everything else is derived by scripts/venue_boxes.py:
+#   map bounds, planning box (planner + explorer), geofence (NED), EV guard radius.
+# Do not edit those by hand.
+#
+# Frame: metres, relative to WHERE THE VEHICLE SITS WHEN PERCEPTION STARTS.
+#   +x = the direction the vehicle faces at start, +y = its left, +z = up.
+# Always start perception on the same mark at the same heading.
+#
+# PLACEHOLDER VALUES: a 7 x 5 m room with a 3.0 m ceiling, vehicle started
+# 2 m from the back wall, centred. The start mark must be at least ~1.5 m from
+# every wall (the script refuses otherwise). MEASURE THE REAL VENUE before any flight
+# beyond the tether.
+venue:
+  x_min: -2.0        # wall behind the start mark
+  x_max: 5.0         # wall ahead
+  y_min: -2.5        # wall to the right
+  y_max: 2.5         # wall to the left
+  floor_z: -0.25     # floor relative to the LiDAR at start (it sits ~0.25 m up)
+  ceiling_z: 2.75    # ceiling relative to the LiDAR at start
+margins:
+  wall_m: 0.5        # room wall -> geofence hard boundary
+  ceiling_m: 0.5     # ceiling -> geofence hard boundary
+  soft_m: 0.5        # geofence hard boundary -> soft band (watchdog soft_margin)
+  map_pad_m: 1.0     # map bounds extend this far beyond the walls
+z_fly: 1.3           # exploration altitude above the start point

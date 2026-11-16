@@ -13,13 +13,43 @@ debts:
     status: OPEN
   - id: VD-006
     package: wp-d
-    claim_untested: "go_to_with_avoidance closed loop: EGO planner -> shim gating -> AS2 motion pipeline -> PX4 offboard; EGO topic names parameterized but unverified against the pinned ros2_version at runtime"
+    claim_untested: "go_to_with_avoidance closed loop (design B, 2026-11-16): grid path on the map_interface slice -> Aerostack2 FollowPath behaviour -> PX4 offboard. Never run against Aerostack2 or PX4. Unverified at runtime: the action name /drone0/FollowPathBehavior, FollowPath accepting frame 'earth', what the vehicle does when the behaviour is cancelled (expected: holds its last reference), path tracking error against the 0.4 m clearance, and the 1 Hz path re-check against a real map."
     original_criterion: "closed-loop planner-to-offboard run (masterplan §6 cap: BUILT_UNVERIFIED)"
-    discharge_path: "SITL later, or gate6 integration session; unit-tested pieces (goal/trajectory validity, LIO health) are executed and passing"
+    discharge_path: "gate6 integration session, tethered first: single goal in free space, goal behind an obstacle, cancel by hover request, cancel by pilot takeover; review tracking error in the bag. Executed and passing now: 62 unit, node and contract tests against a fake map and a fake FollowPath server."
     status: OPEN
   - id: VD-002
     package: wp-c
     claim_untested: "map_interface occupancy/ESDF correctness and compute against REAL Mid-360 /cloud_registered data (all current verification uses procedural room+pillar clouds)"
     original_criterion: "VERIFIED_ON_BAGS once Gate 2/3 bags exist"
     discharge_path: "record bags per masterplan §5 at Gate 2/3 bench sessions; re-run tools/replay_tests/ with bag playback replacing the synthetic feeder"
+    status: OPEN
+  - id: VD-007
+    package: wp-f
+    claim_untested: "frontier_explorer closed loop: explorer goal -> go_to_with_avoidance -> AS2 -> PX4 offboard; arrival, no-progress and timeout detection against real vehicle motion; hold goal and hover-request consumption; battery return"
+    original_criterion: "closed-loop exploration run (masterplan §8 cap: BUILT_UNVERIFIED)"
+    discharge_path: "gate7 exploration session after the gate6 token, executed by the human from an agent-written runbook (tethered first, masterplan §1.1 rule 4). Executed and passing now: 185 unit, scenario, property and node tests, including the real explorer and planner nodes closed over a fake vehicle and a raycast-revealed map (test_closed_loop.py), which says nothing about PX4, AS2 or FAST-LIO."
+    status: OPEN
+  - id: VD-008
+    package: wp-f
+    claim_untested: "QueryMap slice latency and explorer planning time on REAL Mid-360 /cloud_registered data at venue-sized boxes (benchmarks B-01/B-02 use synthetic clouds)"
+    original_criterion: "PR-1/PR-2 on recorded data"
+    discharge_path: "re-run B-01/B-02 against Gate 2/3 bags"
+    status: OPEN
+  - id: VD-009
+    package: wp-f
+    claim_untested: "frame consistency threshold (I6): AS2 earth-frame pose vs FAST-LIO odom under EKF2 EV fusion; default 0.5 m untuned. The 2026-10-13 bench check saw up to 11.7 cm with flow off during brisk motion."
+    original_criterion: "measured divergence distribution during Gate 3 hand-carry"
+    discharge_path: "set frame_divergence_max_m from the Gate 4/5 bags: observed p99 + margin"
+    status: OPEN
+  - id: VD-012
+    package: wp-f
+    claim_untested: "battery interlock input: that as2_platform_pixhawk publishes sensor_msgs/BatteryState on /drone0/sensor_measurements/battery with percentage in 0..1 on this vehicle. If it does not, the explorer refuses to start (battery_required true)."
+    original_criterion: "operator decision D6 (2026-11-16): battery interlock"
+    discharge_path: "gate5 bench session, FC powered: ros2 topic echo the topic, compare with QGC"
+    status: OPEN
+  - id: VD-013
+    package: wp-c
+    claim_untested: "in-flight map saving: CPU and memory of map_saver_node at 10 Hz /cloud_registered on the Orin Nano alongside the flight stack; chunk integrity after a real power cut; octree autosave cost. Ray clipping in map_core (free space in front of out-of-box surfaces) on real clouds."
+    original_criterion: "masterplan §1.2 compute ceiling; operator request 2026-11-16 for checkpointed map saving"
+    discharge_path: "replay a 2026-10-23 bag through FAST-LIO into map_interface + map_saver in the isolated domain, record CPU/RSS in the compute ledger; pull power once on the bench and confirm every chunk on disk loads"
     status: OPEN
