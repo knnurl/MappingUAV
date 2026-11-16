@@ -1,0 +1,16 @@
+# filepath: src/drone_bringup/config/px4/gate4_expected.params
+# Values decided AFTER gate3_ekf2.params was written, checked on top of it by
+# scripts/param_check.py (later files win). Sources in the comments.
+# The operator applies parameters in QGC; this file only records what the FC
+# is expected to hold before Gate 4.
+EKF2_OF_CTRL      0        # flow disabled 2026-10-13: 28-35 cm excursions and a reset in the A/B test (gate3 transcript section 14)
+EKF2_EV_POS_Z     -0.047   # set 2026-09-14: Mid-360 internal IMU above the FC (gate3 open item 4)
+RC_MAP_KILL_SW    6        # assigned 2026-10-13 (gate4 checklist A)
+RC_MAP_FLTMODE    7
+RC_MAP_ARM_SW     5
+RC_MAP_OFFB_SW    8
+COM_FLTMODE1      8        # Stabilized
+COM_FLTMODE4      1        # Altitude
+COM_FLTMODE6      2        # Position (set 2026-10-13)
+SDLOG_MODE        2        # boot until shutdown, bench sessions (gate4 checklist A)
+COM_POSCTL_NAVL   0        # on position loss fall back to Altitude/Manual

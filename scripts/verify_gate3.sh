@@ -6,9 +6,18 @@ set -e
 source ~/colcon_ws/install/setup.bash
 
 echo "--- bridge node alive and publishing ---"
-# The bridge publishes RELIABLE, so hz works; `| tail || true` stops `timeout`'s
-# exit 124 from aborting the script under `set -e`.
-timeout 15 ros2 topic hz /fmu/in/vehicle_visual_odometry 2>/dev/null | tail -4 || true   # expect ~10 Hz
+# The bridge publishes RELIABLE, so hz works. Output goes to a file, not a
+# pipe: `ros2 topic hz` block-buffers into a pipe, so `timeout ... | tail` lost
+# everything it printed (same fix as verify_gate2.sh).
+rate() {  # rate <seconds> <topic>
+  local out; out="$(mktemp)"
+  timeout "$1" stdbuf -oL ros2 topic hz "$2" > "$out" 2>/dev/null || true
+  grep -E 'average rate|min:' "$out" | tail -2 || echo "  no messages in $1 s"
+  rm -f "$out"
+}
+echo "/fmu/in/vehicle_visual_odometry (expect ~10 Hz):"; rate 15 /fmu/in/vehicle_visual_odometry
+echo "--- EV guard state (expect FORWARDING, rej=0; typed copy: 1 on /px4_odom_bridge/state) ---"
+timeout 5 ros2 topic echo --once /px4_odom_bridge/status std_msgs/msg/String 2>/dev/null || echo "  no status in 5 s"
 
 echo "--- sole EV writer (expect 'Publisher count: 1', node px4_odom_bridge) ---"
 ros2 topic info -v /fmu/in/vehicle_visual_odometry

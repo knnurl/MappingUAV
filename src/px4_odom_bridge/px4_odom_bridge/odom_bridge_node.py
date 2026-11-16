@@ -41,12 +41,16 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 from nav_msgs.msg import Odometry
 from px4_msgs.msg import VehicleOdometry
-from std_msgs.msg import String
+from std_msgs.msg import String, UInt8
 
 from px4_odom_bridge.ev_guard import EvGuard, GuardConfig, State
 
 EV_TOPIC = '/fmu/in/vehicle_visual_odometry'
 STATUS_TOPIC = '/px4_odom_bridge/status'
+# Typed copy of the guard state for machine consumers (geofence_watchdog,
+# frontier_explorer), so nothing has to parse the status string.
+STATE_TOPIC = '/px4_odom_bridge/state'
+STATE_CODES = {State.WAITING: 0, State.FORWARDING: 1, State.STALE: 2, State.BLOCKED: 3}
 
 # Quaternions as (w, x, y, z).
 # 180 deg rotation about (1,1,0)/sqrt(2): maps ENU world axes onto NED world axes.
@@ -129,6 +133,7 @@ class OdomBridge(Node):
         self.sub = self.create_subscription(Odometry, topic, self.cb, sub_qos)
 
         self.status_pub = self.create_publisher(String, STATUS_TOPIC, 10)
+        self.state_pub = self.create_publisher(UInt8, STATE_TOPIC, 10)
 
         self.msg_count = 0
         self.drop_count = 0
@@ -136,6 +141,7 @@ class OdomBridge(Node):
         self.create_timer(5.0, self.health)
         self.create_timer(2.0, self.check_writers)
         self.create_timer(1.0, self.publish_status)
+        self.create_timer(0.5, self.publish_state)
         self.get_logger().info(f'Bridging {topic} -> {EV_TOPIC}')
         self.get_logger().info(
             f'EV guard: max step {guard_config.max_step_m} m, max gap {guard_config.max_gap_s} s, '
@@ -166,6 +172,7 @@ class OdomBridge(Node):
                     'geofence watchdog owns the response. See '
                     'docs/px4_odom_bridge_ev_guard_spec.md')
             self.publish_status()
+            self.publish_state()
             return
         if decision.warning:
             self.get_logger().warn(f'EV {decision.warning}', throttle_duration_sec=1.0)
@@ -193,6 +200,10 @@ class OdomBridge(Node):
     def publish_status(self):
         now_s = self.get_clock().now().nanoseconds / 1e9
         self.status_pub.publish(String(data=self.guard.status(now_s)))
+
+    def publish_state(self):
+        now_s = self.get_clock().now().nanoseconds / 1e9
+        self.state_pub.publish(UInt8(data=STATE_CODES[self.guard.reported_state(now_s)]))
 
     def health(self):
         if self.guard.state is State.BLOCKED:

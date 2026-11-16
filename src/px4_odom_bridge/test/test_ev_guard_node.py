@@ -17,7 +17,7 @@ from nav_msgs.msg import Odometry
 from px4_msgs.msg import VehicleOdometry
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import String, UInt8
 
 from px4_odom_bridge.odom_bridge_node import OdomBridge
 
@@ -37,6 +37,9 @@ class FakeLio(Node):
             VehicleOdometry, '/fmu/in/vehicle_visual_odometry', lambda m: self.ev.append(m), 10)
         self.create_subscription(
             String, '/px4_odom_bridge/status', lambda m: self.status.append(m.data), 10)
+        self.states = []
+        self.create_subscription(
+            UInt8, '/px4_odom_bridge/state', lambda m: self.states.append(m.data), 10)
 
     def send(self, x=0.0, y=0.0, z=0.0, qw=1.0):
         msg = Odometry()
@@ -133,6 +136,19 @@ class TestStatusTopic:
         fake.send(x=float('inf'))
         time.sleep(1.5)
         assert any(s.startswith('BLOCKED') for s in fake.status)
+
+    def test_typed_state_follows_the_guard(self, rig):
+        """/px4_odom_bridge/state: 0 WAITING, 1 FORWARDING, 2 STALE, 3 BLOCKED."""
+        fake, _ = rig
+        time.sleep(0.8)
+        assert fake.states and set(fake.states) == {0}
+        stream(fake, 12)
+        assert fake.states[-1] == 1
+        time.sleep(2.0)                      # silence > max_gap_s
+        assert fake.states[-1] == 2
+        fake.send(x=float('inf'))
+        time.sleep(0.8)
+        assert fake.states[-1] == 3
 
     def test_silence_reports_stale(self, rig):
         """A silent LIO must not leave the status reading FORWARDING (2026-09-14 bench run)."""
