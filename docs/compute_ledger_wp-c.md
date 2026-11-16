@@ -8,3 +8,17 @@
 
 Method: /proc utime+stime over a 15 s steady-state window under load,
 max clocks.
+
+## Real-data replay, 2026-11-16 (map fixes and map saver)
+
+`test_data/2026-09-14_gate2_walk_loop`, recorded `/Odometry` + `/cloud_registered`, 95 s from offset
+60 s, real time, isolated domain, one stack at a time. CPU from `top` over 60 s, share of one core.
+
+| Node | CPU | RSS | Notes |
+|---|---|---|---|
+| map_server_node before the ray fix (a373313) | 4.4% | 20.9 MB | |
+| map_server_node with the ray fix + time-matched origin | 7.8% | 20.9 MB | free cells in the z 0.5 / 1.3 m slices: 1744 / 1366 against 1701 / 1309 (small room, mostly inside the box) |
+| map_saver_node (0.05 m voxels, 20 s checkpoints) | 1.3% | 18.1 MB | 54,880 voxels, 5 chunks, 668 KB on disk |
+
+Hand-carried bench bag, props off: not a flight measurement (VD-013 stays open for the power-cut test
+and the vehicle columns).

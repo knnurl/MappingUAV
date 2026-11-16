@@ -69,11 +69,68 @@ TEST(MapCore, PillarBecomesOccupiedRayPathBecomesFree)
   EXPECT_EQ(core.occupancy(3.55, 0.05, 1.05), Occ::UNKNOWN);
 }
 
-TEST(MapCore, PointsOutsideBoundsAreDropped)
+TEST(MapCore, PointsOutsideBoundsAreNeverOccupied)
 {
   MapCore core(0.2, roomBounds());
-  std::vector<point3d> pts = {{50.0, 0.0, 1.0}, {0.0, 50.0, 1.0}};
-  EXPECT_EQ(core.insertCloud(pts, point3d(0, 0, 1)), 0u);
+  std::vector<point3d> pts = {{50.1, 0.1, 1.1}, {0.1, 50.1, 1.1}};
+  EXPECT_EQ(core.insertCloud(pts, point3d(0.1, 0.1, 1.1)), 0u);
+  EXPECT_TRUE(core.occupiedCells().empty());
+}
+
+// The beam to a wall beyond the box still crossed the box: that part is free.
+TEST(MapCore, FarWallOutsideBoxClearsFreeSpaceInside)
+{
+  MapCore core(0.2, roomBounds());
+  core.insertCloud({{50.1, 0.1, 1.1}}, point3d(0.1, 0.1, 1.1));
+  EXPECT_EQ(core.occupancy(2.1, 0.1, 1.1), Occ::FREE);
+  EXPECT_EQ(core.occupancy(4.7, 0.1, 1.1), Occ::FREE);
+  EXPECT_EQ(core.occupancy(2.1, 0.9, 1.1), Occ::UNKNOWN);   // off the ray
+  EXPECT_TRUE(core.occupiedCells().empty());
+}
+
+TEST(MapCore, CeilingAboveZmaxClearsTheColumnBelow)
+{
+  MapCore core(0.2, roomBounds());                          // z_max 3.0
+  core.insertCloud({{0.1, 0.1, 6.1}}, point3d(0.1, 0.1, 1.1));
+  EXPECT_EQ(core.occupancy(0.1, 0.1, 2.1), Occ::FREE);
+  EXPECT_EQ(core.occupancy(0.1, 0.1, 2.9), Occ::FREE);
+  EXPECT_TRUE(core.occupiedCells().empty());
+}
+
+TEST(MapCore, SensorOutsideBoxSkipsOutOfBoxPoints)
+{
+  MapCore core(0.2, roomBounds());
+  core.insertCloud({{50.1, 0.1, 1.1}}, point3d(20.1, 0.1, 1.1));
+  EXPECT_EQ(core.occupancy(2.1, 0.1, 1.1), Occ::UNKNOWN);
+  EXPECT_FALSE(core.distanceMapDirty());
+}
+
+TEST(MapCore, ExitRayDoesNotEraseAnObstacleSeenInTheSameScan)
+{
+  MapCore core(0.2, roomBounds());
+  for (int i = 0; i < 5; ++i) {
+    core.insertCloud({{2.1, 0.1, 1.1}, {50.1, 0.1, 1.1}}, point3d(0.1, 0.1, 1.1));
+  }
+  EXPECT_EQ(core.occupancy(2.1, 0.1, 1.1), Occ::OCCUPIED);
+  EXPECT_EQ(core.occupancy(1.1, 0.1, 1.1), Occ::FREE);
+}
+
+TEST(MapCore, ExitRayRespectsMaxRange)
+{
+  MapCore core(0.2, roomBounds());
+  core.insertCloud({{50.1, 0.1, 1.1}}, point3d(0.1, 0.1, 1.1), 2.0);
+  EXPECT_EQ(core.occupancy(1.1, 0.1, 1.1), Occ::FREE);
+  EXPECT_EQ(core.occupancy(3.1, 0.1, 1.1), Occ::UNKNOWN);
+}
+
+TEST(MapCore, DiagonalExitRayStaysInsideTheBox)
+{
+  MapCore core(0.2, roomBounds());
+  core.insertCloud({{30.0, 40.0, 9.0}, {-30.0, -40.0, -9.0}}, point3d(0.1, 0.1, 1.1));
+  for (const auto & c : core.occupiedCells()) {
+    ADD_FAILURE() << "occupied cell at " << c.x() << "," << c.y() << "," << c.z();
+  }
+  EXPECT_EQ(core.occupancy(0.7, 0.9, 1.3), Occ::FREE);
 }
 
 TEST(MapCore, MaxRangeCutsFarPoints)

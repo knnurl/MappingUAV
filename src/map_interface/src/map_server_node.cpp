@@ -9,7 +9,12 @@
 // pipeline already publishes the pose at cloud rate and this node must not
 // stall on TF availability.
 #include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <deque>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
@@ -58,6 +63,13 @@ public:
     max_insert_range_ = declare_parameter<double>("max_insert_range", 8.0);
     const double edt_period = declare_parameter<double>("edt_period_s", 2.0);
     const double publish_period = declare_parameter<double>("map_publish_period_s", 2.0);
+    // Occupancy octree checkpoint (in-flight map product, with map_saver_node):
+    // written to <path>.tmp then renamed. Empty path or period <= 0 disables.
+    autosave_path_ = declare_parameter<std::string>("autosave_path", "");
+    const double autosave_period = declare_parameter<double>("autosave_period_s", 30.0);
+    // A cloud is inserted from the /Odometry pose nearest its stamp; older
+    // than this many seconds apart, the cloud is skipped.
+    origin_max_dt_s_ = declare_parameter<double>("origin_max_dt_s", 0.15);
 
     core_ = std::make_unique<MapCore>(resolution, b, clearance_cap, unknown_occ);
 
@@ -86,6 +98,12 @@ public:
       std::chrono::duration<double>(publish_period),
       std::bind(&MapServerNode::publishMap, this));
 
+    if (!autosave_path_.empty() && autosave_period > 0.0) {
+      autosave_timer_ = create_wall_timer(
+        std::chrono::duration<double>(autosave_period),
+        std::bind(&MapServerNode::autosave, this));
+    }
+
     RCLCPP_INFO(get_logger(),
       "cpu_grid map: res %.2f m, bounds x[%.1f,%.1f] y[%.1f,%.1f] "
       "z[%.1f,%.1f] (odom/ENU), insert every %.1f s, range cut %.1f m",
@@ -96,16 +114,36 @@ public:
 private:
   void onOdom(const nav_msgs::msg::Odometry::SharedPtr msg)
   {
-    origin_ = octomap::point3d(
-      msg->pose.pose.position.x,
-      msg->pose.pose.position.y,
-      msg->pose.pose.position.z);
-    have_origin_ = true;
+    poses_.emplace_back(
+      rclcpp::Time(msg->header.stamp).seconds(),
+      octomap::point3d(
+        msg->pose.pose.position.x,
+        msg->pose.pose.position.y,
+        msg->pose.pose.position.z));
+    while (poses_.size() > 50) {   // 5 s at 10 Hz
+      poses_.pop_front();
+    }
+  }
+
+  // Sensor origin for a cloud: the odometry sample nearest its stamp.
+  bool originFor(double stamp_s, octomap::point3d & origin) const
+  {
+    double best = origin_max_dt_s_;
+    bool found = false;
+    for (const auto & p : poses_) {
+      const double dt = std::fabs(p.first - stamp_s);
+      if (dt <= best) {
+        best = dt;
+        origin = p.second;
+        found = true;
+      }
+    }
+    return found;
   }
 
   void onCloud(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
   {
-    if (!have_origin_) {
+    if (poses_.empty()) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 10000,
         "cloud received but no /Odometry yet; skipping insertion");
       return;
@@ -116,6 +154,13 @@ private:
     if (last_insert_.nanoseconds() != 0 &&
         (stamp - last_insert_).seconds() < insert_period_s_)
     {
+      return;
+    }
+    octomap::point3d origin;
+    if (!originFor(rclcpp::Time(msg->header.stamp).seconds(), origin)) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
+        "no /Odometry sample within %.2f s of the cloud stamp; cloud skipped",
+        origin_max_dt_s_);
       return;
     }
     last_insert_ = stamp;
@@ -129,8 +174,19 @@ private:
         pts.emplace_back(*ix, *iy, *iz);
       }
     }
-    const size_t inserted = core_->insertCloud(pts, origin_, max_insert_range_);
+    const size_t inserted = core_->insertCloud(pts, origin, max_insert_range_);
     RCLCPP_DEBUG(get_logger(), "inserted %zu/%zu points", inserted, pts.size());
+  }
+
+  void autosave()
+  {
+    const std::string tmp = autosave_path_ + ".tmp";
+    if (!core_->tree().writeBinary(tmp) ||
+      std::rename(tmp.c_str(), autosave_path_.c_str()) != 0)
+    {
+      RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 30000,
+        "octree autosave to %s failed", autosave_path_.c_str());
+    }
   }
 
   void onEdtTimer()
@@ -181,8 +237,10 @@ private:
   }
 
   std::unique_ptr<MapCore> core_;
-  octomap::point3d origin_{0.0f, 0.0f, 0.0f};
-  bool have_origin_{false};
+  std::deque<std::pair<double, octomap::point3d>> poses_;
+  double origin_max_dt_s_{0.15};
+  std::string autosave_path_;
+  rclcpp::TimerBase::SharedPtr autosave_timer_;
   double insert_period_s_{0.5};
   double max_insert_range_{8.0};
   rclcpp::Time last_insert_{0, 0, RCL_ROS_TIME};

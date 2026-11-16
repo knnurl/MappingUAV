@@ -5,6 +5,8 @@
 // never consume NED (masterplan §1.2).
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -42,24 +44,75 @@ public:
       unknown_as_occupied);
   }
 
-  // Insert a world-frame cloud taken from sensor_origin. Points outside the
-  // bounds are dropped BEFORE insertion (the fence is the map's universe).
-  // max_range < 0 disables the range cut. Returns points actually inserted.
+  // Insert a world-frame cloud taken from sensor_origin. max_range < 0
+  // disables the range cut. Returns the number of points inside the bounds
+  // (the ones that can become occupied voxels).
+  //
+  // A point OUTSIDE the bounds is not discarded: the beam still crossed the
+  // box on its way out, so the cells along the part of the ray inside the box
+  // are updated as free. Nothing is marked occupied for it. Without this, the
+  // space in front of a wall beyond the box, or under a ceiling above z_max,
+  // stays unknown for ever and an explorer sees frontiers that never clear.
+  // If the sensor itself is outside the box such points are skipped.
   size_t insertCloud(const std::vector<octomap::point3d> & pts,
                      const octomap::point3d & sensor_origin,
                      double max_range = -1.0)
   {
+    const bool origin_inside =
+      bounds_.contains(sensor_origin.x(), sensor_origin.y(), sensor_origin.z());
     octomap::Pointcloud pc;
+    octomap::KeySet exit_keys;                 // one free ray per exit voxel
+    std::vector<octomap::point3d> exits;
     for (const auto & p : pts) {
       if (bounds_.contains(p.x(), p.y(), p.z())) {
         pc.push_back(p);
+      } else if (origin_inside) {
+        octomap::point3d e;
+        octomap::OcTreeKey k;
+        if (clipToBounds(sensor_origin, p, max_range, e) &&
+          tree_->coordToKeyChecked(e, k) && exit_keys.insert(k).second)
+        {
+          exits.push_back(e);
+        }
       }
     }
-    if (pc.size() == 0) {
+    if (pc.size() == 0 && exits.empty()) {
       return 0;
     }
-    tree_->insertPointCloud(pc, sensor_origin, max_range,
-                            /*lazy_eval=*/true, /*discretize=*/true);
+    if (pc.size() > 0) {
+      tree_->insertPointCloud(pc, sensor_origin, max_range,
+                              /*lazy_eval=*/true, /*discretize=*/true);
+    }
+    if (!exits.empty()) {
+      // Occupied endpoints of this scan win over free rays of the same scan,
+      // as inside octomap's own insertPointCloud.
+      octomap::KeySet occupied;
+      for (size_t i = 0; i < pc.size(); ++i) {
+        octomap::OcTreeKey k;
+        const octomap::point3d & p = pc[i];
+        const bool in_range = max_range < 0.0 ||
+          (p - sensor_origin).norm() <= max_range;
+        if (in_range && tree_->coordToKeyChecked(p, k)) {
+          occupied.insert(k);
+        }
+      }
+      octomap::KeySet free_cells;
+      octomap::KeyRay ray;
+      for (const auto & e : exits) {
+        if (tree_->computeRayKeys(sensor_origin, e, ray)) {
+          free_cells.insert(ray.begin(), ray.end());
+        }
+        octomap::OcTreeKey k;
+        if (tree_->coordToKeyChecked(e, k)) {
+          free_cells.insert(k);                // computeRayKeys excludes the end
+        }
+      }
+      for (const auto & k : free_cells) {
+        if (occupied.find(k) == occupied.end()) {
+          tree_->updateNode(k, false, /*lazy_eval=*/true);
+        }
+      }
+    }
     tree_->updateInnerOccupancy();
     edt_dirty_ = true;
     return pc.size();
@@ -117,6 +170,43 @@ public:
   const Bounds & bounds() const { return bounds_; }
 
 private:
+  // Last point of the segment origin->p that is still inside the bounds
+  // (origin must be inside), pulled 1 mm back from the face and shortened to
+  // max_range when that is set. False if the segment has no usable length.
+  bool clipToBounds(const octomap::point3d & o, const octomap::point3d & p,
+                    double max_range, octomap::point3d & out) const
+  {
+    const double d[3] = {p.x() - o.x(), p.y() - o.y(), p.z() - o.z()};
+    const double oo[3] = {o.x(), o.y(), o.z()};
+    const double lo[3] = {bounds_.x_min, bounds_.y_min, bounds_.z_min};
+    const double hi[3] = {bounds_.x_max, bounds_.y_max, bounds_.z_max};
+    double t = 1.0;
+    for (int i = 0; i < 3; ++i) {
+      if (d[i] > 0.0) {
+        t = std::min(t, (hi[i] - oo[i]) / d[i]);
+      } else if (d[i] < 0.0) {
+        t = std::min(t, (lo[i] - oo[i]) / d[i]);
+      }
+    }
+    const double len = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (!(len > 0.0) || !std::isfinite(len)) {
+      return false;
+    }
+    double dist = t * len - 1e-3;
+    if (max_range >= 0.0) {
+      dist = std::min(dist, max_range);
+    }
+    if (dist <= 0.0) {
+      return false;
+    }
+    const double s = dist / len;
+    out = octomap::point3d(
+      static_cast<float>(oo[0] + d[0] * s),
+      static_cast<float>(oo[1] + d[1] * s),
+      static_cast<float>(oo[2] + d[2] * s));
+    return bounds_.contains(out.x(), out.y(), out.z());
+  }
+
   Bounds bounds_;
   double clearance_cap_;
   std::unique_ptr<octomap::OcTree> tree_;
