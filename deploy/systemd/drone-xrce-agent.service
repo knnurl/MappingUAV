@@ -2,14 +2,16 @@
 # Gate 1 link as a service. Enable only after gate1 token workflow allows
 # vehicle integration; harmless on the bench (idles when FC absent).
 [Unit]
-Description=Drone: Micro XRCE-DDS agent on TELEM2 (/dev/ttyTHS1)
+Description=Drone: Micro XRCE-DDS agent on TELEM2 (FTDI cable)
 After=drone-clocks.service
 Wants=drone-clocks.service
 
+# Device: the FTDI cable in use since 2026-10-27 (operator). If the cable
+# changes, this path changes: check ls /dev/serial/by-id/.
 [Service]
 User=neric
 Environment=HOME=/home/neric
-ExecStart=/usr/local/bin/MicroXRCEAgent serial --dev /dev/ttyTHS1 -b 921600
+ExecStart=/usr/local/bin/MicroXRCEAgent serial --dev /dev/serial/by-id/usb-FTDI_TTL232RG-VSW3V3_FTADW2E6-if00-port0 -b 921600
 Restart=on-failure
 RestartSec=2
 # journald flood guard:

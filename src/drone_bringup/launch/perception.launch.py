@@ -29,13 +29,13 @@ def generate_launch_description():
         }],
     )
 
-    # Same placeholder-and-identity TFs as gate3_fusion; see the
-    # architectural note there. [MEASURE] still pending on the lidar mount.
+    # Same TFs as gate3_fusion.launch.py (visualisation only; see the note
+    # there). base_link -> livox_frame measured 2026-09-14: 85 mm above the FC.
     tf_base_to_livox = Node(
         package='tf2_ros',
         executable='static_transform_publisher',
         name='tf_base_link_to_livox',
-        arguments=['--x', '9.99', '--y', '9.99', '--z', '9.99',
+        arguments=['--x', '0', '--y', '0', '--z', '0.085',
                    '--roll', '0', '--pitch', '0', '--yaw', '0',
                    '--frame-id', 'base_link',
                    '--child-frame-id', 'livox_frame'],
