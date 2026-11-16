@@ -80,11 +80,11 @@ Purpose: VD-011, look for R1 with logging on, take a fresh parameter record.
     Nobody within 3 m. Wait 60 s for FAST-LIO to settle.
 
 0.3 T2: bash ~/colcon_ws/scripts/verify_gate3.sh
-    EXPECT ~10 Hz EV, one publisher, status FORWARDING with rej=0.
+    EXPECT ~10 Hz EV, one publisher, status FORWARDING with rejected=0.
 
 0.4 Leave it untouched for 15 minutes. T2:
       ros2 topic echo /px4_odom_bridge/status
-    EXPECT FORWARDING throughout, fwd rising ~10 per second, rej=0.
+    EXPECT FORWARDING throughout, forwarded rising ~10 per second, rejected=0.
     QGC MAVLink console at the start and the end:
       listener vehicle_local_position
     Record xy_reset_counter, z_reset_counter, heading_reset_counter.
@@ -160,7 +160,7 @@ PART 3: TETHERED HOVER
 ==========================================================================
 BEFORE EVERY FLIGHT
 [ ] T1 freshly started with the vehicle on the take-off mark; 60 s settle.
-[ ] Status FORWARDING, rej=0. Reset counters recorded as the baseline.
+[ ] Status FORWARDING, rejected=0. Reset counters recorded as the baseline.
 [ ] T3: bag of /Odometry /fmu/out/vehicle_odometry /px4_odom_bridge/status
         (never /livox/lidar or /cloud_registered in flight):
         ros2 bag record -o ~/flight_logs/gate4_<date>_<n> /Odometry \
