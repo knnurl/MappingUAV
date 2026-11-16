@@ -10,9 +10,7 @@
 | Livox-SDK2 | github.com/Livox-SDK/Livox-SDK2 | master @ 2026-07-04 (installed to /usr/local) | Required by livox_ros_driver2 |
 | realsense2_camera | apt `ros-humble-realsense2-camera` (+ `ros-humble-librealsense2`) | 4.58.3 / librealsense2 2.58.3 | D435i color + depth views only (`d435i.launch.py`); debs, not source. V4L2 backend: the pointcloud param is `pointcloud__neon_.enable` |
 
-Additions for Phases 3–7 (Aerostack2, EGO-Planner ports, Bonxai/OctoMap, nvblox,
-FUEL/TARE candidates) are appended here by their work packages with provenance
-and diff surface, per masterplan §6/§7.
-
+| Aerostack2 core | apt: ros-humble-as2-* | 1.1.3-1jammy (deb) | Official Humble debs; metapackage skipped (gazebo-assets ignition version conflict on this Jetson; sim not needed on vehicle) |
+| as2_platform_pixhawk | github.com/aerostack2/as2_platform_pixhawk | `482563ba` (main @ 2026-07-05) | NOT released as deb — source-built. Upstream pins px4_msgs release/1.14; built against our 1.15 with `deploy/patches/as2_platform_pixhawk_px4msgs_1.15.patch` (3-line SensorGps field rename, GPS path unused on this GPS-denied vehicle). Upstream launch wrapper bypassed (fmu_prefix quoting bug), node launched directly from gate5_as2.launch.py. Second patch, applied after the first: `deploy/patches/as2_platform_pixhawk_offboard_hold.patch` (7 files, +1305/−29; new `offboard_guard.hpp/.cpp` and 2 gtest files). No setpoints outside Offboard (PX4 v1.15's uXRCE client publishes /fmu/in into the controllers in every mode), a hold on every entry, AS2 commands only after a control mode set after the request, none after an exit or disarm until restart. gate5_as2.launch.py refuses to start without it |
 | ego-planner-swarm | github.com/ZJU-FAST-Lab/ego-planner-swarm | `23a8d5a1` (ros2_version) | Official authors' ROS2 branch; smoke-builds clean on Humble/aarch64 (7 planner pkgs, 5m45s, 2026-07-05). Sim/swarm packages COLCON_IGNOREd per no-sim/no-multi-drone rules |
 | tare_planner (DP-2 candidate) | github.com/caochao39/tare_planner | humble-jazzy @ 2026-07-05 | Compile-health PASS with arm64 or-tools v9.8 swap (see docs/dp2_evidence.md); adoption awaits decision_dp2_explore |

@@ -20,6 +20,7 @@ setup(
         (os.path.join('share', package_name, 'config', 'planning'), glob('config/planning/*')),
         (os.path.join('share', package_name, 'config', 'exploration'),
          glob('config/exploration/*')),
+        (os.path.join('share', package_name, 'config', 'as2'), glob('config/as2/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

@@ -52,4 +52,21 @@ debts:
     claim_untested: "in-flight map saving: CPU and memory of map_saver_node at 10 Hz /cloud_registered on the Orin Nano alongside the flight stack; chunk integrity after a real power cut; octree autosave cost. Ray clipping in map_core (free space in front of out-of-box surfaces) on real clouds."
     original_criterion: "masterplan §1.2 compute ceiling; operator request 2026-11-16 for checkpointed map saving"
     discharge_path: "replay a 2026-10-23 bag through FAST-LIO into map_interface + map_saver in the isolated domain, record CPU/RSS in the compute ledger; pull power once on the bench and confirm every chunk on disk loads"
+  - id: VD-004
+    package: wp-b
+    claim_untested: "AS2 takeoff/go_to/land behavior transitions under PX4 offboard, offboard-keepalive continuity, and controller gain sanity — closed loop never executed (no sim, no vehicle token)"
+    original_criterion: "closed-loop behavior run (masterplan §7 cap: BUILT_UNVERIFIED)"
+    discharge_path: "SITL later, or first vehicle session after gate4 token per gate5 runbook; missions/bench_box.py is the acceptance mission"
+    status: OPEN
+  - id: VD-005
+    package: wp-b
+    claim_untested: "as2_platform_pixhawk px4_msgs 1.15 compatibility beyond compile: runtime topic/QoS handshake with the v1.15 uXRCE agent (platform pins release/1.14 upstream; 3-line SensorGps patch applied from deploy/patches/)"
+    original_criterion: "platform [VERIFY] against our px4_msgs branch"
+    discharge_path: "gate5 bench session with FC powered: verify platform sees /fmu/out topics and offboard handshake works before any arming"
+    status: OPEN
+  - id: VD-010
+    package: wp-b
+    claim_untested: "PX4 closed-loop response to deploy/patches/as2_platform_pixhawk_offboard_hold.patch: Offboard entered from a POSITION hover holds position and yaw, level; entered on the ground stays at idle with no takeoff; no /fmu/in setpoint reaches PX4 outside Offboard, so POSITION, Land and failsafes are not disturbed. Verified only against a fake PX4 (tests/offboard_node_gtest.cpp, which fails on the unpatched platform) and against PX4 v1.15.0 source."
+    original_criterion: "level, safe, predictable handover from a POSITION hover to Offboard (operator requirement 2026-09-14)"
+    discharge_path: "gate5 runbook C4-C5 (props off) and D0 a-c (props on, tethered): RC switch and service entries from a POSITION hover, re-entry, ground entry; review the .ulg attitude and local position around every switch"
     status: OPEN
