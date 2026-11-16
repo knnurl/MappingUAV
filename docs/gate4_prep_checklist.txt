@@ -2,6 +2,9 @@
 Gate 4: first tethered hover. Human pilot in the loop, agent never touches the
 vehicle. Every [ ] below is operator-executed.
 
+Procedure: docs/gate4_runbook.txt (written 2026-11-16). This file stays the
+list of open items; the runbook is the order they are done in.
+
 Gate 4 pass criteria (from the master plan): position hold within +/- 10 cm for
 2 continuous minutes, zero EKF resets, no LIO degradation events in the log.
 
@@ -76,9 +79,9 @@ fixed; each is a single parameter.
 [ ] gate3_ekf2.params re-read back from the FC and diffed against the file
     (params can silently fail to save before a reboot). Confirm EKF2_EV_POS_Z
     = -0.047 and EKF2_RNG_POS_* survive the reboot.
-[ ] YAW TEST (gate3 open item 2, never run): rotate 90 deg clockwise, confirm
-    heading rises by ~pi/2 and settles. The one axis never directly exercised,
-    and the axis a frame-convention error hides in.
+[x] YAW TEST PASSED 2026-10-13 (gate3 transcript section 14, open item 2):
+    ~99 deg clockwise, PX4 and LIO agree within 1.2 deg, correct sign. PX4 yaw
+    took ~45 s to settle the last 2 deg afterwards.
 [ ] HEIGHT PATH DECIDED (gate3 open item 10, section 11). Inside the hover
     envelope (<5 m, <1 m/s) three things engage that no bench test exercised:
     conditional range aid, MPC_ALT_MODE 2 terrain hold, and the terrain
@@ -112,7 +115,8 @@ fixed; each is a single parameter.
     MPC_Z_VEL_MAX_UP/DN 0.5, MPC_TILTMAX_AIR 20 deg, MPC_THR_HOVER 0.62.
 [ ] Recording policy in force: rosbag limited to /Odometry and
     /fmu/out/vehicle_odometry; PX4 .ulg logging enabled (that is the primary
-    record). SDLOG_MODE 1, SDLOG_PROFILE 129 (or 131 if the EV motion test is
+    record). SDLOG_MODE 2 (boot until shutdown, as in section A; the earlier
+    "1" here was stale), SDLOG_PROFILE 129 (or 131 if the EV motion test is
     being run in the same session).
 
 =========================== E. DURING THE HOVER ===========================

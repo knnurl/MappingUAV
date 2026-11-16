@@ -1,0 +1,202 @@
+# filepath: docs/gate4_runbook.txt
+# Gate 4 (gate4_tethered_hover): first tethered hover, human pilot.
+# HUMAN-EXECUTED. The agent may run the software stack on the bench when the
+# operator is present and says so (Part 0 only); it never touches the vehicle
+# and never runs anything once props are on. Only the operator writes
+# docs/gate_status.yaml and closes verification debt.
+#
+# Written 2026-11-16 against main a942e56 plus the uncommitted bridge state
+# topic. Open items live in docs/gate4_prep_checklist.txt; this file is the
+# order they are done in. Evidence behind the numbers:
+# docs/gate3_verification_2026-09-14.md.
+
+==========================================================================
+PAGE 1: READ FIRST
+==========================================================================
+PASS CRITERIA (master plan)
+  Position hold within +/- 10 cm for 2 continuous minutes in POSITION mode,
+  zero EKF resets, no LIO degradation events in the log.
+
+OPEN VERIFICATION DEBT TOUCHING THIS GATE
+  VD-011  px4_odom_bridge EV guard never run on the live chain; the
+          deliberate LiDAR power cut has never been done.
+          Discharged by: Part 0, steps 0.4 and 0.6.
+
+KNOWN RISKS (from the Gate 3 transcript)
+  R1  One full EKF2 re-initialisation at rest, 2026-10-13 17:39:31,
+      unexplained and unlogged. A repeat in the air breaks the pass criterion
+      and drops PX4 out of POSITION. Part 0 exists to catch it on the bench.
+  R2  Margin is thin. Handheld at 0.45 m/s with optical flow off, PX4 against
+      LIO was 4.7 cm median, 11.7 cm max. Fly the hover gently.
+  R3  No second horizontal source. Optical flow is off (EKF2_OF_CTRL 0). If
+      LIO stops, EKF2 dead-reckons and PX4 falls back to Altitude within
+      seconds (COM_POSCTL_NAVL 0). The pilot must be ready to fly Altitude.
+  R4  Every LIO number so far is with props off. Vibration with props on is
+      untested: Part 2.
+  R5  People within a few metres pull the LIO estimate by decimetres (Gate 2).
+      Nobody moves inside the volume during a run.
+
+ROLES
+  PILOT: RC transmitter, hand on the kill switch (RC6) for every second the
+         props can turn. Sole authority to abort, no discussion.
+  GROUND: terminals, calls out the bridge state and any reset.
+  One person may hold both roles in Part 0 only.
+
+ABORT TABLE (agreed before arming; pilot acts, then talks)
+  Trigger                                   Pilot action
+  ----------------------------------------  --------------------------------
+  Any doubt                                 Land. If not instantly possible: KILL
+  GROUND calls "STALE" or "BLOCKED"         Land now in POSITION if it holds,
+                                            else Altitude; do not wait
+  PX4 drops out of POSITION by itself       Fly Altitude, land
+  GROUND calls "RESET" (any EKF reset)      Land; run is void
+  Unexpected climb (terrain hold)           Throttle down in Altitude, land
+  Oscillation, toilet-bowl, drift > 0.5 m   Land; if growing: KILL
+  Tether snag or vehicle near the limit     KILL
+  KILL: hold RC6 for 5 s or disarm. Releasing inside 5 s restarts the motors.
+
+==========================================================================
+PART 0: QUIET BENCH RUN (props OFF, ~30 min)  [agent may run 0.2-0.6]
+==========================================================================
+Purpose: VD-011, look for R1 with logging on, take a fresh parameter record.
+
+0.1 FC powered, battery or bench supply. QGC connected by USB.
+    Set SDLOG_MODE 2 and SDLOG_PROFILE 129, reboot the FC, wait 5 min
+    (timesync warm-up). Save the parameters from QGC to
+    docs/px4_params_<date>.params: the dump in the repo is from 2026-09-13
+    and predates the October changes.
+    Then: python3 scripts/param_check.py docs/px4_params_<date>.params
+    EXPECT "0 differ". It checks, among others: EKF2_EV_POS_Z -0.047, EKF2_OF_CTRL 0,
+    EKF2_RNG_CTRL 1, EKF2_EV_CTRL 11, EKF2_HGT_REF 3, RC_MAP_KILL_SW 6,
+    COM_FLTMODE1/4/6 = 8/1/2. By eye as well: EKF2_RNG_POS_* non-zero,
+    GF_ACTION as decided (checklist section A).
+
+0.2 Every terminal (bench environment; the lab WiFi breaks the normal one):
+      source ~/colcon_ws/install/setup.bash
+      export ROS_LOCALHOST_ONLY=1
+      export CYCLONEDDS_URI=file://$HOME/colcon_ws/src/drone_bringup/config/cyclonedds_bench.xml
+    T1: ros2 launch drone_bringup gate3_fusion.launch.py \
+          serial_dev:=/dev/serial/by-id/usb-FTDI_TTL232RG-VSW3V3_FTADW2E6-if00-port0
+    Nobody within 3 m. Wait 60 s for FAST-LIO to settle.
+
+0.3 T2: bash ~/colcon_ws/scripts/verify_gate3.sh
+    EXPECT ~10 Hz EV, one publisher, status FORWARDING with rej=0.
+
+0.4 Leave it untouched for 15 minutes. T2:
+      ros2 topic echo /px4_odom_bridge/status
+    EXPECT FORWARDING throughout, fwd rising ~10 per second, rej=0.
+    QGC MAVLink console at the start and the end:
+      listener vehicle_local_position
+    Record xy_reset_counter, z_reset_counter, heading_reset_counter.
+    EXPECT all three unchanged. ANY change: this is R1. Stop here, pull the
+    .ulg, do not go to Part 2 until it is explained.
+    Also check the log for "PreArm:" text. It comes from the other autopilot
+    on the SiK link (checklist section A) and means that item is still open.
+
+0.5 Kill switch, props OFF: arm on RC5, kill on RC6 -> motors stop at once;
+    hold -> disarms after 5 s. Arm again, kill, release at ~2 s -> motors
+    restart. See it here, not in the air. Then each RC7 position in QGC:
+    Stabilized / Altitude / Position.
+
+0.6 LiDAR power cut (VD-011), disarmed, at a moment of your choosing:
+    pull the LiDAR power for ~15 s, then restore it.
+    EXPECT status STALE within ~1 s of the cut, then BLOCKED when data
+    returns; T1 logs "EXTERNAL VISION BLOCKED" once; no further EV to PX4
+    (QGC console: uorb top vehicle_visual_odometry shows 0 Hz); PX4 does
+    not jump (listener vehicle_local_position stays near its last value,
+    xy_valid goes false after a few seconds).
+    Restart T1. EXPECT FORWARDING again after the 60 s settle.
+
+0.7 Record: both reset-counter readings, the status lines, the .ulg name.
+    PASS for Part 0: 15 min FORWARDING, zero resets, kill switch behaves,
+    power cut latches BLOCKED. Anything else: no props today.
+
+==========================================================================
+PART 1: HARDWARE (checklist sections A and B; operator)
+==========================================================================
+[ ] 1.1 LiDAR power connector and strain relief redone (cause of the
+        2026-09-14 divergence). Tug test with the stack running: status
+        stays FORWARDING.
+[ ] 1.2 Mid-360 on foam standoffs. Nothing enters its 0.5 m blind radius
+        when the arms flex. Re-measure the lever arm if the height changed
+        (EKF2_EV_POS_Z and the 0.085 m TF).
+[ ] 1.3 Foreign autopilot on the SiK link powered off or re-paired
+        (checklist A). Confirm no "PreArm:" text for 2 minutes.
+[ ] 1.4 Geofence decision recorded (GF_ACTION). The tether is the
+        containment today.
+[ ] 1.5 Motor order and direction in QGC Actuators, props OFF. Then props
+        on: balanced, correct rotation, tight.
+[ ] 1.6 Tether anchored below the vehicle, clear of props at every angle,
+        length keeps the vehicle inside a clear 3 x 3 x 2.5 m volume and well
+        inside 20 m of the start point (EV guard radius).
+[ ] 1.7 Battery charged; note the voltage. COM_LOW_BAT_ACT decision recorded
+        (operator decision D6, 2026-11-16: land).
+[ ] 1.8 Gate 2 room-perimeter walk loop, if it is to be closed today
+        (checklist B): after 1.1, props off.
+
+==========================================================================
+PART 2: PROPS ON, STRAPPED DOWN (vibration, R4)
+==========================================================================
+Vehicle strapped to a heavy base that cannot lift or slide. Tether on.
+PILOT on the kill switch. Stack running as in 0.2, status FORWARDING.
+
+2.1 Arm in Stabilized. Raise throttle slowly to just below lift, hold 30 s,
+    then ~hover throttle (MPC_THR_HOVER 0.62) for 30 s if the base holds.
+    Disarm.
+    GROUND watches the status throughout: any STALE/BLOCKED -> KILL.
+2.2 While the motors run, T2:
+      ros2 topic echo /Odometry --field pose.pose.position
+    EXPECT the position to stay within ~3 cm of its motors-off value. Gate 2
+    measured 1.1 cm median, 2.6 cm max, motors off. If it wanders by more
+    than 5 cm strapped down, LIO is being disturbed: stop, improve the
+    isolation, repeat.
+2.3 Pull the .ulg, open in Flight Review: vibration metrics in the green
+    band, no accelerometer clipping. Reset counters unchanged.
+    PASS for Part 2: green vibration, LIO within 5 cm, FORWARDING, zero
+    resets. Otherwise no flight today.
+
+==========================================================================
+PART 3: TETHERED HOVER
+==========================================================================
+BEFORE EVERY FLIGHT
+[ ] T1 freshly started with the vehicle on the take-off mark; 60 s settle.
+[ ] Status FORWARDING, rej=0. Reset counters recorded as the baseline.
+[ ] T3: bag of /Odometry /fmu/out/vehicle_odometry /px4_odom_bridge/status
+        (never /livox/lidar or /cloud_registered in flight):
+        ros2 bag record -o ~/flight_logs/gate4_<date>_<n> /Odometry \
+          /fmu/out/vehicle_odometry /fmu/out/vehicle_local_position \
+          /px4_odom_bridge/status /px4_odom_bridge/state
+[ ] Nobody inside the volume. Abort table read aloud once.
+
+3.1 Hop: arm in Altitude, lift to ~0.3 m, 5 s, land. Checks trim, motor
+    order in the air, and that Altitude is flyable (the R3 fallback).
+3.2 Altitude hover at ~1.0 m for 30 s. Land.
+3.3 Take off in Altitude to ~1.0 m, sticks centred, switch RC7 to POSITION.
+    EXPECT the vehicle holds. A lurch on the switch: back to Altitude, land,
+    stop (frame or estimator problem).
+3.4 POSITION hover, hands off the sticks as far as it is safe, for at least
+    150 s (the criterion needs 120 s continuous). GROUND calls the status
+    every 30 s. Land in POSITION. Disarm.
+3.5 Repeat 3.3-3.4 until two runs meet the criterion, battery permitting.
+    Land at the first low-battery warning.
+
+==========================================================================
+AFTER
+==========================================================================
+A1 Pull the .ulg and the bag for each flight.
+A2 Measure, from the bag, for the best continuous 120 s of 3.4:
+     max |x - mean|, max |y - mean|, max |z - mean| of
+     /fmu/out/vehicle_local_position, and the same for /Odometry.
+     PASS needs all three within 0.10 m on the PX4 estimate.
+   From the .ulg: xy/z/heading reset counters constant over the flight;
+   EV innovations bounded; no EV timeout messages; vibration green.
+   From the bag: /px4_odom_bridge/state is 1 for the whole flight.
+A3 Write docs/gate4_verification_<date>.md in the form of the Gate 3
+   transcript: Part 0 results, Part 2 vibration and LIO numbers, each
+   flight's numbers, every abort and why, and what the evidence says about
+   VD-011.
+A4 Ask for the Gate 4 evaluation. Only the operator writes gate_status.yaml.
+
+NOT PART OF GATE 4
+  EKF2_EV_DELAY motion test (before Gate 5). Re-enabling optical flow
+  (needs SENS_FLOW_ROT measured, then the A/B test repeated).
