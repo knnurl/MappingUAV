@@ -19,3 +19,19 @@ map_interface:
     max_insert_range: 8.0
     edt_period_s: 2.0
     map_publish_period_s: 2.0
+    origin_max_dt_s: 0.15   # cloud inserted from the /Odometry pose nearest its stamp
+    # Occupancy octree checkpoint while flying ("" disables). The 3D point map
+    # is saved by map_saver below; scripts/map_sync.sh copies both off the vehicle.
+    autosave_path: ""
+    autosave_period_s: 30.0
+
+# In-flight 3D map product (operator request 2026-11-16): one point per voxel
+# of everything /cloud_registered has shown, written as PCD chunks.
+map_saver:
+  ros__parameters:
+    voxel_size: 0.05
+    max_voxels: 4000000        # ~200 MB of RAM at the limit
+    checkpoint_period_s: 20.0  # a crash loses at most this much
+    min_free_gb: 4.0
+    output_dir: ""             # default ~/map_exports/session_<time>/
+    cloud_topic: /cloud_registered
