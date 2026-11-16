@@ -23,4 +23,6 @@ geofence_watchdog:
     # arrived counts as silent (-1 disables; set e.g. 10.0 for flight ops
     # where the pipeline must already be up):
     require_streams_after_s: -1.0
-    cmd_resend_period_s: 1.0
+    cmd_resend_period_s: 1.0   # until PX4 reports Land once; then never again
+    use_bridge_state: true     # land when px4_odom_bridge is BLOCKED/STALE/silent
+    bridge_timeout_s: 2.0

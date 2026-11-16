@@ -44,6 +44,23 @@ Test D - LIO silence (props OFF, bench, FC powered)
 2. Stop the perception service (drone-perception.service).
 3. EXPECT: NAV_LAND commanded within ~1 s of /Odometry silence.
 
+Test E - odometry bridge BLOCKED (props OFF, bench, FC powered, armed)
+   (added 2026-11-16: the watchdog now reads /px4_odom_bridge/state)
+1. Full pipeline up, bridge FORWARDING, watchdog running with
+   require_streams_after_s 10.0. Arm from RC in POSITION, props OFF.
+2. Pull LiDAR power (the same act that discharges VD-011). The bridge goes
+   STALE, then BLOCKED when data returns.
+3. EXPECT: NAV_LAND within ~1 s of the state leaving FORWARDING; QGC shows
+   Land; /geofence/alert then reports "LAND confirmed by PX4: no further
+   land commands".
+4. Pilot switches back to POSITION. EXPECT: PX4 STAYS in POSITION (the
+   watchdog does not command Land again). Disarm. Restart the watchdog.
+5. Repeat step 2 DISARMED. EXPECT: no vehicle_command from the watchdog.
+
+Soft breach note: /geofence/hover_request is consumed by go_to_with_avoidance
+(it cancels the active AS2 behaviour). With no planner running, a soft breach
+is alert-only.
+
 Record all transcripts to docs/, then request gate7 evaluation from the
 operator. The agent may parse results; only the operator writes
 gate_status.yaml.

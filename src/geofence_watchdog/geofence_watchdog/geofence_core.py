@@ -127,16 +127,75 @@ class Action(IntEnum):
 
 
 def decide(fence_state: FenceState, estimator_valid: bool,
-           lio_silent: bool, estimate_silent: bool) -> Action:
+           lio_silent: bool, estimate_silent: bool,
+           bridge_bad: bool = False) -> Action:
     """The action ladder from masterplan §3 [FIXED]:
     hard breach OR estimator invalid OR LIO silence -> LAND;
     soft breach -> ALERT_HOVER; otherwise nothing.
     estimate_silent (vehicle_local_position stream dead) also lands: a
     watchdog that has lost the estimate it polices must fail safe.
+    bridge_bad (operator decision 2026-11-16): px4_odom_bridge reports BLOCKED
+    or STALE, or its state topic has gone silent. External vision has stopped
+    reaching EKF2 although FAST-LIO may still be publishing, so /Odometry
+    liveness alone does not show it. Land while the estimate is still good.
     """
     if (fence_state == FenceState.HARD or not estimator_valid
-            or lio_silent or estimate_silent):
+            or lio_silent or estimate_silent or bridge_bad):
         return Action.LAND
     if fence_state == FenceState.SOFT:
         return Action.ALERT_HOVER
     return Action.NONE
+
+
+# px4_odom_bridge guard states on /px4_odom_bridge/state (std_msgs/UInt8).
+BRIDGE_WAITING = 0
+BRIDGE_FORWARDING = 1
+BRIDGE_STALE = 2
+BRIDGE_BLOCKED = 3
+
+
+def bridge_state_bad(state) -> bool:
+    """True for a bridge state that means EV has stopped after it had started.
+
+    None (never received) and WAITING are not failures here: before the first
+    LIO sample nothing has been lost. Never-received is covered by the node's
+    TimeoutMonitor grace (require_streams_after_s). An unknown code is bad.
+    """
+    if state is None or state in (BRIDGE_WAITING, BRIDGE_FORWARDING):
+        return False
+    return True
+
+
+class LandCommander:
+    """Decides when a land command goes out (operator decision 2026-11-16).
+
+    - Nothing is sent to a vehicle known to be disarmed. Unknown arming state
+      (no vehicle_status yet) counts as armed: failing to land an airborne
+      vehicle is worse than a spare command on the bench.
+    - The command is repeated every resend_period_s until PX4 reports the Land
+      mode once after a command of ours. From then on this object never sends
+      again: PX4 has the order, and a pilot who then selects another mode is
+      taking over deliberately and must not be overridden a second later.
+    """
+
+    def __init__(self, resend_period_s=1.0):
+        if resend_period_s <= 0.0:
+            raise ValueError('resend_period_s must be > 0')
+        self.resend_period_s = resend_period_s
+        self.last_sent_s = None
+        self.confirmed = False
+
+    def step(self, now_s, want_land: bool, armed, nav_is_land: bool) -> bool:
+        """Return True when a land command must be sent now.
+
+        armed: True, False, or None when unknown.
+        """
+        if self.last_sent_s is not None and nav_is_land:
+            self.confirmed = True
+        if not want_land or self.confirmed or armed is False:
+            return False
+        if (self.last_sent_s is None
+                or now_s - self.last_sent_s >= self.resend_period_s):
+            self.last_sent_s = now_s
+            return True
+        return False
