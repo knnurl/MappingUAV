@@ -21,3 +21,11 @@ repositories:
     # After import, from src/as2_platform_pixhawk, git apply in this order:
     #   deploy/patches/as2_platform_pixhawk_px4msgs_1.15.patch
     #   deploy/patches/as2_platform_pixhawk_offboard_hold.patch
+  octomap:
+    type: git
+    url: https://github.com/OctoMap/octomap.git
+    version: 007a0b5b6e4d3bb6c54f2c65a12234e03adcd72f   # tag v1.10.0 (master's cmake exports broken); octovis COLCON_IGNOREd
+  octomap_msgs:
+    type: git
+    url: https://github.com/OctoMap/octomap_msgs.git
+    version: 50eece2bfc2f3163b2fb70b9157356e12d375dff   # ros2 branch @ build date

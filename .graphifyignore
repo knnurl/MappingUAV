@@ -1,0 +1,23 @@
+# Colcon build artifacts
+build/
+install/
+log/
+COLCON_IGNORE
+*.last
+
+# Python cache and metadata
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Massive third-party source and generated message noise
+# (These will bloat the graph and are not your custom logic)
+px4_msgs/
+octomap_msgs/
+octomap-distribution/
+FAST_LIO/PCD/
+# octomap/octovis bundles QGLViewer+VRender; it was 2281 of 2915 graph nodes
+# (78%) and drowned every query in unrelated geometry code. octovis already
+# carries a COLCON_IGNORE; the CPU-grid map backend consumes the octomap
+# library as a dependency, not as code we edit.
+octomap/
