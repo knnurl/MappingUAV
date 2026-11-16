@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- filepath: src/geofence_watchdog/package.xml -->
+<package format="3">
+  <name>geofence_watchdog</name>
+  <version>0.1.0</version>
+  <description>Standalone NED-box geofence watchdog (WP-E). No Aerostack2/planner/map dependencies by design.</description>
+  <maintainer email="k.ural1@salford.ac.uk">kaan</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>px4_msgs</depend>
+  <test_depend>python3-pytest</test_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>
