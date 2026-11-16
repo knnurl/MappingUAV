@@ -1,0 +1,21 @@
+# filepath: deploy/systemd/drone-perception.service
+# Livox driver + FAST-LIO2 + odom bridge (gate3_fusion minus the agent,
+# which drone-xrce-agent.service owns; gate2_lio + odom bridge = the
+# perception half). Uses gate3_fusion.launch.py's components via a wrapper
+# script so the unit stays a thin exec line.
+[Unit]
+Description=Drone: perception pipeline (Mid-360 + FAST-LIO2 + odom bridge)
+After=drone-xrce-agent.service network-online.target
+Wants=drone-xrce-agent.service
+
+[Service]
+User=neric
+Environment=HOME=/home/neric
+ExecStart=/home/neric/colcon_ws/scripts/run_perception.sh
+Restart=on-failure
+RestartSec=3
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target
