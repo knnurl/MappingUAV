@@ -8,6 +8,7 @@
 | FAST_LIO | github.com/hku-mars/FAST_LIO | `a4743b09` (ROS2) + ikd-Tree `e2e3f4e9` | ROS2 branch; config keys verified against its mid360.yaml |
 | Micro-XRCE-DDS-Agent | github.com/eProsima/Micro-XRCE-DDS-Agent | tag v2.4.3 | v2.x pairs with stock v1.15 firmware client |
 | Livox-SDK2 | github.com/Livox-SDK/Livox-SDK2 | master @ 2026-07-04 (installed to /usr/local) | Required by livox_ros_driver2 |
+| realsense2_camera | apt `ros-humble-realsense2-camera` (+ `ros-humble-librealsense2`) | 4.58.3 / librealsense2 2.58.3 | D435i color + depth views only (`d435i.launch.py`); debs, not source. V4L2 backend: the pointcloud param is `pointcloud__neon_.enable` |
 
 Additions for Phases 3–7 (Aerostack2, EGO-Planner ports, Bonxai/OctoMap, nvblox,
 FUEL/TARE candidates) are appended here by their work packages with provenance

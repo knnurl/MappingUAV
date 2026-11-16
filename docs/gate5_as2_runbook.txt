@@ -1,0 +1,388 @@
+# filepath: docs/gate5_as2_runbook.txt
+# Gate 5 (gate5_as2_behaviors): Aerostack2 behaviours on the vehicle.
+# WP-B deliverable. HUMAN-EXECUTED ONLY. The agent never executes this file;
+# it may parse the records afterwards. Only the operator writes
+# docs/gate_status.yaml and closes verification debt.
+#
+# Written 2026-09-13 against: wp-b-as2 cada09b, wp-e-geofence-watchdog
+# ed4443f, wp-g-ops f7308bc, src/as2_platform_pixhawk 482563b, Aerostack2
+# debs 1.1.3, PX4 v1.15.0 (docs/px4pro_params.txt). Updated 2026-09-14 for
+# deploy/patches/as2_platform_pixhawk_offboard_hold.patch (wp-b-as2). If any
+# of these moved, re-check the cited lines before the session.
+
+==========================================================================
+PAGE 1: READ BEFORE ANYTHING ELSE
+==========================================================================
+
+TOKENS REQUIRED (docs/gate_status.yaml)
+[ ] gate4_tethered_hover: CONFIRMED  (WP-B integration precondition, masterplan §7)
+[ ] gate5_debt_review:    CONFIRMED  (operator has read this page, masterplan §1.3)
+
+OPEN VERIFICATION DEBT TOUCHING THIS GATE
+(docs/verification_debt.yaml on wp-b-as2 and wp-g-ops; union at merge)
+
+VD-004  wp-b  OPEN
+  Untested: AS2 takeoff/go_to/land transitions under PX4 offboard,
+  offboard keepalive continuity, controller gain sanity. Never run closed
+  loop. missions/bench_box.py is the acceptance mission.
+  Discharged by: Part D.
+
+VD-005  wp-b  OPEN
+  Untested: as2_platform_pixhawk (upstream pins px4_msgs 1.14; built against
+  1.15 with deploy/patches/as2_platform_pixhawk_px4msgs_1.15.patch) at
+  runtime against the v1.15 uXRCE agent: topics, QoS, offboard handshake.
+  Discharged by: Part C (C1-C5), props OFF, before any props-on arming.
+
+VD-001  wp-g  OPEN
+  Untested: systemd boot ordering (clocks -> xrce -> perception ->
+  autonomy), Restart=on-failure recovery, journald rate limiting on a real
+  boot.
+  Discharged by: Part E. Fix K3 first.
+
+VD-010  wp-b  OPEN
+  Untested: PX4's closed-loop response to the offboard hold patch (K8):
+  a level position-and-yaw hold when Offboard is entered from a POSITION
+  hover, idle with no takeoff when entered on the ground, and no /fmu/in
+  setpoint reaching PX4 outside Offboard. Verified only against a fake PX4
+  (node tests, which fail on the unpatched platform) and PX4 v1.15.0 source.
+  Discharged by: C4, C5 and D0.
+
+OI-10  (docs/wp-f_frontier_explorer_spec.md §16, due Gate 5)
+  Question: what PlatformInfo.offboard means with as2_platform_pixhawk.
+  Answer from source (pixhawk_platform.cpp, px4VehicleControlModeCallback):
+  offboard = PX4 vehicle_control_mode.flag_control_offboard_enabled and
+  armed = flag_armed. offboard is true only while PX4 is actually in
+  Offboard, not when AS2 has merely asked for it. `connected` is hard-coded
+  true (as2_core 1.1.3 aerial_platform.cpp:180, a TODO) and carries no
+  information. PX4 v1.15.0 publishes /fmu/out/vehicle_control_mode by
+  default (uxrce_dds_client/dds_topics.yaml); not yet seen live.
+  Discharged by: C1 (topic present) and C3 (observed truth table).
+
+KNOWN HAZARDS AND DEFECTS (read from source 2026-09-13/14; not VD entries)
+
+K1  RESOLVED by the offboard hold patch (K8): thrust before takeoff.
+    Unpatched, while armed and before the controller sets a control mode,
+    the platform streams a body-rate setpoint with thrust -min_thrust as a
+    normalised 0..1 value (pixhawk_platform.cpp:254-262 at 482563b): about
+    50% thrust on the ground with the old min_thrust 0.5, and no attitude
+    control. The patch removes that stream. min_thrust is 0.15 (operator
+    approved 2026-09-13) and only the unused ATTITUDE and ACRO paths read
+    it now. C4 confirms on the bench.
+
+K2  Offboard exit, disarm and restart (patched behaviour).
+    Unpatched, after any Offboard exit the platform kept sending the last AS2
+    velocity command, which PX4 mixed into POSITION or Land (K8). Patched:
+    on any exit (pilot switch, watchdog NAV_LAND, failsafe) or disarm,
+    setpoints stop at once and this platform process never forwards AS2
+    commands again; the log says "AS2 commands disabled until the platform
+    node is restarted". A later Offboard entry in the same process only holds.
+    RULE: restart the AS2 stack (T3) between every flight and after any
+    offboard exit or disarm.
+
+K3  drone-xrce-agent.service (wp-g-ops) hard-codes --dev /dev/ttyTHS1. The
+    link today is the FTDI cable
+    (/dev/serial/by-id/usb-FTDI_TTL232R-3V3_FTCKEJ6W-if00-port0).
+    Fix the unit, or rewire TELEM2 to the 40-pin UART, before Part E.
+
+K4  bench_box.py waypoints are ABSOLUTE in the AS2 earth frame (go_to
+    default frame_id 'earth', as2_python_api go_to_module.py:177), not
+    relative to takeoff as the script's comment says. earth = PX4 local
+    origin = where FAST-LIO started. Start perception with the vehicle on
+    the takeoff mark at a fixed heading, and take off from that mark.
+    earth +x = startup forward, +y = startup left.
+
+K5  Nothing consumes /geofence/hover_request at Gate 5 (no subscriber on
+    wp-b-as2). A soft breach only raises an alert. The hard action
+    (NAV_LAND on /fmu/in/vehicle_command) does not depend on AS2.
+
+K6  RC parameters in docs/px4pro_params.txt:
+    RC_MAP_KILL_SW 0 (no kill switch mapped).
+    COM_RC_OVERRIDE 1: stick override in auto modes only (bit 0), NOT in
+    Offboard (bit 1), confirmed in PX4 v1.15.0 source (commander_params.c,
+    Commander.cpp). Sticks never take the vehicle out of Offboard.
+    COM_FLTMODE1/4/6 = 8/1/4: confirm in QGC which slot, if any, is POSITION.
+    Covered by B2-B4.
+
+K7  AS2 1.1.3 has no hover behaviour (motion behaviours: takeoff, go_to,
+    follow_path, land). At Gate 5, "hover" means the controller holding its
+    last position reference after a behaviour succeeds. That is what D1
+    tests.
+
+K8  STOP ITEM: fly only with the offboard hold patch.
+    PX4 v1.15's uXRCE-DDS client publishes every /fmu/in setpoint straight
+    into the controllers' uORB topics in every flight mode
+    (uxrce_dds_client/dds_topics.h.em). So the unpatched platform disturbs
+    POSITION flight whenever it runs armed, drops the vehicle at 15%
+    throttle without attitude control when Offboard is entered before a
+    behaviour starts, and fights the pilot or the watchdog's Land after an
+    exit. deploy/patches/as2_platform_pixhawk_offboard_hold.patch fixes all
+    three (include/as2_platform_pixhawk/offboard_guard.hpp):
+      - outside Offboard: heartbeat only, and only while PX4 odometry, the
+        EKF in-air flag and PX4's control mode are fresh;
+      - every entry holds: in the air at the position and yaw of entry, on
+        the ground with zero velocity (no takeoff);
+      - AS2 commands only after a control mode set after the request or
+        entry, and never again after an exit or disarm.
+    gate5_as2.launch.py refuses to start without it (A0).
+
+==========================================================================
+PART A: SOFTWARE PRECONDITIONS (agent prepares, operator ticks)
+==========================================================================
+[ ] A0 Offboard hold patch applied and tested (K8): src/as2_platform_pixhawk
+       at 482563b + as2_platform_pixhawk_px4msgs_1.15.patch +
+       as2_platform_pixhawk_offboard_hold.patch, rebuilt. With the XRCE agent
+       stopped and CYCLONEDDS_URI unset: ROS_DOMAIN_ID=73 ROS_LOCALHOST_ONLY=1
+       colcon test --packages-select as2_platform_pixhawk --ctest-args -R offboard
+       then colcon test-result --test-result-base build/as2_platform_pixhawk --verbose:
+       all 24 test cases pass (19 guard unit tests, 5 node tests), none skipped.
+[ ] A1 After the gate4 token: wp-b-as2, wp-e-geofence-watchdog and wp-g-ops
+       merged to main. colcon build --symlink-install --parallel-workers 2
+       (MAKEFLAGS=-j4) clean. Unit tests pass (geofence_watchdog: 47).
+[ ] A2 src/drone_bringup/config/as2/platform_pixhawk.yaml has
+       external_odom: false (gate5_as2.launch.py refuses to start otherwise).
+[ ] A3 src/drone_bringup/config/geofence.yaml resized for the room (operator
+       decision 2026-09-13). x and y at least [-2.0, 2.0] so bench_box's
+       ±1.0 m corners stay outside the 0.5 m soft band. Room clear about
+       4.5 x 4.5 m. z_min (ceiling, negative) at least 0.5 m below the real
+       ceiling.
+       Values used: x[____,____] y[____,____] z[____,____] soft_margin ____
+[ ] A4 K1 resolved: min_thrust = 0.15 (operator approved 2026-09-13) on the
+       merged branch. Motor-output limit for C4 = ______ (0..1 scale).
+[ ] A5 missions/bench_box.py uses the offboard/arm order that passes C4. If C4
+       only passes for "arm, then offboard", stop: the agent changes the
+       script and it is re-checked.
+[ ] A6 scripts/flight_log_session.sh (wp-g-ops) extended with the AS2 topics
+       /drone0/platform/info, /drone0/self_localization/pose,
+       /drone0/motion_reference/pose and every topic ending in behavior_status
+       (confirm the names with `ros2 topic list` at C1).
+[ ] A7 K3 resolved before Part E.
+
+==========================================================================
+PART B: VEHICLE AND PEOPLE
+==========================================================================
+[ ] B1 docs/gate4_prep_checklist.txt still true today (tether, props,
+       vibration, envelope parameters re-read from the FC).
+[ ] B2 Kill switch mapped (RC_MAP_KILL_SW != 0) and tested disarmed this
+       session: motors stop at once.
+[ ] B3 Mode switch has POSITION, and the pilot flew the Gate 4 tethered hover
+       in it.
+[ ] B4 Takeover procedure agreed: pilot flips to POSITION; if in any doubt,
+       kill switch. Do not rely on stick movement to leave Offboard (K6).
+[ ] B5 Tether per Gate 4 with enough slack to reach all bench_box corners
+       (±1.0 m) without pulling.
+[ ] B6 Roles: PILOT (RC; sole authority to abort, no discussion), GROUND
+       OPERATOR (terminals, /geofence/state, platform log), RECORDER.
+[ ] B7 FC powered at least 5 min before Part C (timesync warm-up, Gate 1).
+[ ] B8 Vehicle on the takeoff mark at the fixed heading BEFORE perception
+       starts (K4).
+
+==========================================================================
+TERMINALS (every terminal: source ~/colcon_ws/install/setup.bash;
+check `echo $ROS_DOMAIN_ID` prints 0)
+==========================================================================
+T1  ros2 launch drone_bringup gate3_fusion.launch.py \
+      serial_dev:=/dev/serial/by-id/usb-FTDI_TTL232R-3V3_FTCKEJ6W-if00-port0
+T2  (after /Odometry is up) ros2 run geofence_watchdog watchdog_node \
+      --ros-args --params-file ~/colcon_ws/src/drone_bringup/config/geofence.yaml \
+      -p require_streams_after_s:=10.0
+    HARD latches until restart. If it trips, find out why, then restart T2.
+T3  ros2 launch drone_bringup gate5_as2.launch.py
+    Restart between every flight (K2).
+T4  bash ~/colcon_ws/scripts/flight_log_session.sh   (A6)
+PX4 console: QGC MAVLink console (QGC's own USB link to the FC).
+
+==========================================================================
+PART C: PROPS OFF, FC POWERED, BATTERY CONNECTED
+==========================================================================
+C1  Topics and names (VD-005, OI-10)
+    ros2 topic list --no-daemon --spin-time 5 | grep -E \
+      '^/fmu/out/(vehicle_control_mode|vehicle_odometry|sensor_combined|battery_status)$'
+    EXPECT all four. vehicle_control_mode missing: STOP (the platform cannot
+    report armed/offboard).
+    ros2 service list | grep -E '^/drone0/set_(arming_state|offboard_mode)$'
+    EXPECT both.
+    ros2 topic list | grep -E 'platform/info|self_localization/pose|motion_reference/pose|behavior_status'
+    Record the exact names; they feed A6.
+    T3 log: EXPECT "External odometry mode: false". No errors about topics.
+
+C2  Single LiDAR odometry writer
+    ros2 topic info -v /fmu/in/vehicle_visual_odometry
+    EXPECT two publishers: px4_odom_bridge (RELIABLE) and /drone0/platform
+    (BEST_EFFORT, created unconditionally in the platform's constructor).
+    PX4 console: uorb top vehicle_visual_odometry
+    EXPECT about 10 Hz. About 100 Hz or more means the platform is sending:
+    STOP.
+
+C3  OI-10 truth table (disarmed, nothing spinning)
+    For each row record: PX4 `listener vehicle_status` nav_state
+    (2 = POSCTL, 14 = OFFBOARD); `ros2 topic echo /drone0/platform/info
+    --once` fields connected, armed, offboard, status.state; T3 log lines.
+      a. Mode switch in POSITION, disarmed.
+      b. ros2 service call /drone0/set_offboard_mode std_srvs/srv/SetBool "{data: true}"
+         Sample 3 times over 5 s: does PX4 stay in Offboard while disarmed?
+      c. Pilot flips to POSITION. EXPECT T3 log OFFBOARD_DISABLED if (b)
+         reached Offboard. Restart T3 (K2).
+      d. Arm from RC in POSITION, record, disarm.
+    Copy the table into the session record. It closes OI-10.
+
+C4  K1 and K8 checks on the bench (props OFF)
+    a. No setpoints outside Offboard: arm from RC in POSITION, T3 running.
+       timeout 5 ros2 topic echo --qos-reliability best_effort /fmu/in/trajectory_setpoint
+       timeout 5 ros2 topic echo --qos-reliability best_effort /fmu/in/vehicle_rates_setpoint
+       EXPECT no output from either. PX4 console: uorb top offboard_control_mode
+       EXPECT about 100 Hz (the heartbeat). Disarm. Restart T3.
+    b. Ground entry. PX4 console, running throughout: listener actuator_motors
+       Order 1 (as bench_box.py does it):
+         ros2 service call /drone0/set_offboard_mode std_srvs/srv/SetBool "{data: true}"
+         ros2 service call /drone0/set_arming_state std_srvs/srv/SetBool "{data: true}"
+       EXPECT T3 log "OFFBOARD HOLD on the ground", nav_state 14, and steady
+       control[0..3] at idle, at or below the A4 limit, for 10 s.
+       Disarm (RC or kill switch): EXPECT T3 log "AS2 commands disabled until
+       the platform node is restarted". Restart T3.
+       Order 2: arm first, then offboard. Same expectations. Restart T3.
+    PASS for an order: PX4 accepted it and motor output stayed at idle.
+    STOP if neither order passes. A5 follows from this.
+
+C5  Takeover rehearsal (props OFF)
+    Engage offboard and arm in the order that passed C4. Pilot flips to
+    POSITION. EXPECT nav_state 2, T3 log OFFBOARD_DISABLED and "AS2 commands
+    disabled until the platform node is restarted", and no output from the
+    C4a echo commands. Then kill switch: EXPECT motor outputs 0. Disarm.
+    Restart T3.
+
+C6  Watchdog in the loop
+    ros2 topic hz /geofence/state          EXPECT about 2 Hz
+    ros2 topic echo /geofence/state --once EXPECT data: 0
+    T2 log "Geofence active, NED box ..." matches the A3 values.
+    (Soft, hard and death trip tests belong to Gate 7:
+    docs/gate7_watchdog_trip_runbook.txt.)
+
+==========================================================================
+PART D: PROPS ON, TETHERED
+==========================================================================
+BEFORE EVERY FLIGHT
+[ ] T1, T2, T4 running; T3 freshly restarted; vehicle on the mark (K4).
+[ ] /geofence/state = 0. platform/info armed false, offboard false.
+[ ] ros2 topic echo --qos-reliability best_effort --once \
+      /fmu/out/vehicle_local_position
+    xy_valid and z_valid true. Record xy_reset_counter, z_reset_counter,
+    heading_reset_counter as the baseline.
+D0  POSITION hover to Offboard handover (K8, VD-010). The pilot takes off
+    and flies in POSITION; T3 fresh at the start of each of a, b and c.
+    a. RC switch: hover at about 1.0 m, sticks centred for 5 s, then flip
+       the RC offboard switch (channel 8).
+       EXPECT T3 log "OFFBOARD HOLD in the air at NED ...", nav_state 14,
+       and the vehicle stays level and within ±0.10 m of where it was for
+       30 s. Flip back to POSITION: EXPECT T3 log "AS2 commands disabled
+       until the platform node is restarted". Land. Restart T3.
+    b. Service: as a, but enter with
+       ros2 service call /drone0/set_offboard_mode std_srvs/srv/SetBool "{data: true}"
+    c. Re-entry: as a, but after flipping back to POSITION do not restart
+       T3. Hover 5 s and flip the RC offboard switch again: EXPECT a hold at
+       the new entry point. Send the D2 go_to: EXPECT the vehicle does not
+       move. Flip back to POSITION, land, restart T3.
+
+D1-D4: engage offboard and arm in the C4-passing order, using the two
+service calls from C4.
+
+D1  Takeoff, hover, land
+    ros2 action send_goal /drone0/TakeoffBehavior as2_msgs/action/Takeoff \
+      "{takeoff_height: 0.5, takeoff_speed: 0.3}"
+    EXPECT takeoff_success: true, height about 0.5 m.
+    Hover: send nothing for 60 s (K7). Note the time takeoff_success arrived.
+    ros2 action send_goal /drone0/LandBehavior as2_msgs/action/Land \
+      "{land_speed: 0.3}"
+    EXPECT land_success: true, then PX4 disarms (COM_DISARM_LAND 2 s).
+
+D2  Single go_to (also a direction check: +x is startup forward)
+    Takeoff as in D1, then:
+    ros2 action send_goal /drone0/GoToBehavior as2_msgs/action/GoToWaypoint \
+      "{target_pose: {header: {frame_id: earth}, point: {x: 1.0, y: 0.0, z: 0.5}}, max_speed: 0.3, yaw: {mode: 0}}"
+    EXPECT the vehicle moves FORWARD 1 m; go_to_success: true.
+    Moves any other way: pilot takes over, STOP (frame error).
+    Return with the same command at x: 0.0, then land as in D1.
+
+D3  Acceptance mission, 3 consecutive runs
+    python3 ~/colcon_ws/missions/bench_box.py --namespace drone0 --speed 0.5
+    An uncounted shakedown at --speed 0.3 is allowed first.
+    EXPECT exit code 0. Restart T3 between runs. A failed run resets the
+    count to zero.
+
+D4  Takeover drill in flight
+    Takeoff as in D1. During the hover, pilot flips to POSITION.
+    EXPECT PX4 holds position, T3 log OFFBOARD_DISABLED. Pilot lands
+    manually. Restart T3 (K2).
+
+STOP CONDITIONS (any one: pilot takes over or kills, land, end the session,
+record why)
+- Pilot's call, at any time, without discussion.
+- Motion in a direction other than the one commanded.
+- Any change of xy/z/heading reset counters, or an EKF reset reported.
+- /geofence/state not 0, or any /geofence/alert message.
+- /Odometry silence or FAST-LIO warnings.
+- OFFBOARD_DISABLED in the T3 log that the pilot did not cause.
+- A behaviour action returning false.
+- On an Offboard entry: a drop, a tilt beyond a brief correction, or drift
+  over 0.20 m.
+
+==========================================================================
+PART E: SYSTEMD (VD-001), PROPS OFF, AFTER PART D
+==========================================================================
+E1  Stop T1-T4. `pgrep -x MicroXRCEAgent` prints nothing (the serial port
+    is exclusive).
+E2  `grep -- --dev ~/colcon_ws/deploy/systemd/drone-xrce-agent.service` shows
+    the device actually wired (K3).
+E3  sudo cp ~/colcon_ws/deploy/systemd/*.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable drone-clocks drone-xrce-agent drone-perception
+    drone-autonomy stays disabled (the unit ships disabled; enabling it is
+    the operator's call after the gate5 token).
+E4  sudo reboot. After boot:
+    systemctl list-units 'drone-*'       EXPECT clocks, xrce, perception active
+    systemd-analyze critical-chain drone-perception.service
+                                          EXPECT xrce-agent before perception
+    journalctl -b -u drone-xrce-agent     EXPECT session established
+    /fmu topics and /Odometry visible from a terminal.
+E5  Induced crash, one per service (start autonomy by hand for this):
+    sudo systemctl start drone-autonomy
+    for u in drone-xrce-agent drone-perception drone-autonomy:
+      sudo systemctl kill --signal=SIGKILL $u
+      after RestartSec (2-3 s): systemctl show -p NRestarts -p ActiveState $u
+      EXPECT NRestarts incremented, ActiveState active.
+    sudo systemctl stop drone-autonomy
+E6  systemctl show -p LogRateLimitIntervalUSec -p LogRateLimitBurst drone-perception
+    EXPECT 30 s / 200. Record any "Suppressed" lines from journalctl -b.
+
+==========================================================================
+PASS CRITERIA (operator decision 2026-09-13)
+==========================================================================
+P1  C1-C6 passed, with the OI-10 table and the C4 motor values recorded.
+P2  D1: takeoff and land succeeded. Hover held within ±0.10 m per axis of
+    the /drone0/self_localization/pose recorded when takeoff_success
+    arrived, for 60 continuous seconds (from the bag).
+P3  D2: both go_to legs succeeded, in the commanded direction.
+P4  D3: bench_box.py exited 0 on 3 consecutive runs.
+P5  Across D0-D4: zero EKF resets (counters unchanged and none in the
+    .ulg), zero watchdog alerts or LAND actions, and no offboard exit
+    except the planned switches back to POSITION in D0 and D4.
+P6  E1-E6 recorded (VD-001 evidence).
+P7  D0 a-c: every Offboard entry held level within ±0.10 m for 30 s, and
+    after the re-entry in D0c the go_to did not move the vehicle.
+
+==========================================================================
+RECORDS
+==========================================================================
+Write docs/gate5_verification_<YYYY-MM-DD>.md containing:
+- Part A values (fence box, min_thrust and limit, launch order used).
+- C1-C6 command outputs, the OI-10 table and the C4 motor values.
+- D0: T3 log lines, and the .ulg attitude and local position around every
+  Offboard switch.
+- D1-D4 results, action results, bag directories, .ulg file names.
+- CPU and RSS of the AS2 stack (9 processes) and the watchdog, measured
+  during a D1 hover with the method in docs/compute_ledger_wp-b.md, for
+  the compute ledger's vehicle columns.
+- E1-E6 outputs.
+- Which of VD-004, VD-005, VD-001, VD-010 and OI-10 the evidence supports
+  closing.
+Then ask the operator for the gate5 evaluation. The agent may parse the
+records; only the operator writes gate_status.yaml and closes VD entries.
