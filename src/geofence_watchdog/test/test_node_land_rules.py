@@ -142,3 +142,15 @@ def test_bridge_input_can_be_disabled(make):
         h.bridge_pub.publish(UInt8(data=3))
     h.spin_for(1.0, tick)
     assert h.lands() == []
+
+
+def test_soft_then_hard_breach_still_lands(make):
+    """Regression: the action log changed severity at one call site, rclpy
+    raised, and the watchdog died exactly when it had to land."""
+    h = make()
+    h.spin_for(0.6, lambda: (h.status(True), h.pos(0.0, 0.0, -1.0)))     # OK   (info)
+    h.spin_for(0.6, lambda: (h.status(True), h.pos(1.2, 0.0, -1.0)))     # SOFT (warn)
+    assert h.lands() == []
+    h.spin_for(1.0, lambda: (h.status(True), h.pos(5.0, 0.0, -1.0)))     # HARD (error)
+    assert len(h.lands()) >= 1
+    h.spin_for(0.6, lambda: (h.status(True), h.pos(0.0, 0.0, -1.0)))     # still latched
