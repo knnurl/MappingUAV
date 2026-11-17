@@ -43,6 +43,7 @@ from geometry_msgs.msg import Point, PoseStamped
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import BatteryState
 from std_msgs.msg import Empty, String, UInt8
 
 from map_interface.srv import QueryMap
@@ -77,6 +78,11 @@ class GoToWithAvoidance(Node):
         self.map_fail_max = int(d('map_fail_max', 3).value)
         self.max_replans = int(d('max_replans', 3).value)
         self.path_check_period = float(d('path_check_period_s', 1.0).value)
+        # Below this the planner takes no goal and stops the active one (the
+        # vehicle holds; the pilot lands). Kept under the explorer's 0.25 so its
+        # fly-home goal is still accepted.
+        self.battery_min = float(d('battery_min_fraction', 0.20).value)
+        self.battery = None
         self.goal_frame = d('path_frame_id', 'earth').value
         ns = d('as2_namespace', 'drone0').value
         action_name = d('follow_path_action', '').value or f'/{ns}/FollowPathBehavior'
@@ -110,6 +116,8 @@ class GoToWithAvoidance(Node):
         self.create_subscription(PoseStamped, f'/{ns}/self_localization/pose', self.on_pose, sensor)
         self.create_subscription(PlatformInfo, f'/{ns}/platform/info', self.on_platform, 10)
         self.create_subscription(UInt8, '/lio_health/state', self.on_lio, sensor)
+        self.create_subscription(BatteryState, f'/{ns}/sensor_measurements/battery',
+                                 self.on_battery, sensor)
         for topic in ('/geofence/hover_request', '/lio_health/hover_request',
                       '/go_to_with_avoidance/hover_request'):
             self.create_subscription(
@@ -142,6 +150,10 @@ class GoToWithAvoidance(Node):
         self.offboard = bool(msg.offboard and msg.armed)
         self.flying = msg.status.state == PlatformStatus.FLYING
 
+    def on_battery(self, msg):
+        if math.isfinite(msg.percentage):
+            self.battery = msg.percentage / (100.0 if msg.percentage > 1.5 else 1.0)
+
     def on_lio(self, msg):
         self.lio_state = int(msg.data)
         self.lio_t = self.now()
@@ -151,7 +163,8 @@ class GoToWithAvoidance(Node):
             self.now(), pose_t=self.pose_t, pose_timeout_s=self.pose_timeout,
             lio_state=self.lio_state, lio_t=self.lio_t, lio_timeout_s=self.lio_timeout,
             platform_t=self.platform_t, platform_timeout_s=self.platform_timeout,
-            offboard=self.offboard, flying=self.flying)
+            offboard=self.offboard, flying=self.flying,
+            battery=self.battery, battery_min=self.battery_min)
 
     def on_hover_request(self, topic):
         if self.state in (PLANNING, EXECUTING):

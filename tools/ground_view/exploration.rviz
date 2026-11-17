@@ -1,0 +1,45 @@
+# filepath: tools/ground_view/exploration.rviz
+# Minimal RViz config for the ground station: occupancy cells, octomap cloud, current goal.
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: odom
+    Frame Rate: 10
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 1
+      Plane Cell Count: 30
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Occupied cells
+      Enabled: true
+      Topic:
+        Value: /map_interface/occupied_cells
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+      Style: Boxes
+      Size (m): 0.2
+      Color Transformer: AxisColor
+    - Class: rviz_default_plugins/Pose
+      Name: Planner goal
+      Enabled: true
+      Topic:
+        Value: /go_to_with_avoidance/goal
+      Shape: Arrow
+    - Class: rviz_default_plugins/Pose
+      Name: Vehicle (PX4 estimate)
+      Enabled: true
+      Topic:
+        Value: /drone0/self_localization/pose
+        Reliability Policy: Best Effort
+      Shape: Axes
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 15

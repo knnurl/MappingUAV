@@ -226,6 +226,11 @@ class TestStopReason:
     def test_all_good(self):
         assert stop_reason(10.0, **self.ok) == ''
 
+    def test_battery_rule(self):
+        assert stop_reason(10.0, **self.ok, battery=0.5, battery_min=0.2) == ''
+        assert 'battery' in stop_reason(10.0, **self.ok, battery=0.15, battery_min=0.2)
+        assert stop_reason(10.0, **self.ok, battery=None, battery_min=0.2) == ''   # no topic, no rule
+
     @pytest.mark.parametrize('change,word', [
         (dict(pose_t=None), 'pose'), (dict(pose_t=9.0), 'pose'),
         (dict(lio_t=None), 'LIO health unknown'), (dict(lio_t=5.0), 'LIO health unknown'),

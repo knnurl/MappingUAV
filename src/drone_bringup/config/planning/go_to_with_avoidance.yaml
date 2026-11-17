@@ -23,5 +23,6 @@ go_to_with_avoidance:
     map_fail_max: 3
     max_replans: 3
     path_check_period_s: 1.0
+    battery_min_fraction: 0.20   # no goals below this; under the explorer's 0.25 on purpose
     as2_namespace: drone0
     path_frame_id: earth      # AS2 earth = odom numerically (explorer spec §2.1)

@@ -1,0 +1,21 @@
+# filepath: deploy/systemd/drone-as2.service
+# Aerostack2 on its own, because it must be restarted after every Offboard exit
+# (scripts/restart_as2.sh) without restarting the watchdog or the map.
+# Ships disabled; integration requires the gate4 token.
+[Unit]
+Description=Drone: Aerostack2 (platform, estimator, controller, behaviours)
+After=drone-autonomy.service
+Requires=drone-autonomy.service
+
+[Service]
+User=neric
+Environment=HOME=/home/neric
+ExecStart=/home/neric/colcon_ws/scripts/run_as2.sh
+# No automatic restart: a platform that restarts by itself in flight would start
+# forwarding commands again without anyone deciding it.
+Restart=no
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=200
+
+[Install]
+WantedBy=multi-user.target

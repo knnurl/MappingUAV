@@ -65,6 +65,8 @@ class GeofenceWatchdog(Node):
         # (<0) disables, so a bench watchdog without the pipeline stays quiet.
         self.declare_parameter('require_streams_after_s', -1.0)
         self.declare_parameter('cmd_resend_period_s', 1.0)
+        # /Odometry (upstream FAST-LIO) or /fastlio2/lio_odom (the fork).
+        self.declare_parameter('lio_odom_topic', '/Odometry')
         # False only for a stack whose px4_odom_bridge predates the state topic.
         self.declare_parameter('use_bridge_state', True)
         self.declare_parameter('bridge_timeout_s', 2.0)   # publisher: 2 Hz
@@ -107,7 +109,7 @@ class GeofenceWatchdog(Node):
             VehicleLocalPosition, '/fmu/out/vehicle_local_position',
             self._on_local_position, best_effort)
         self.create_subscription(
-            Odometry, '/Odometry', self._on_lio, best_effort)
+            Odometry, p('lio_odom_topic'), self._on_lio, best_effort)
         self.create_subscription(
             UInt8, '/px4_odom_bridge/state', self._on_bridge_state, best_effort)
         self.create_subscription(

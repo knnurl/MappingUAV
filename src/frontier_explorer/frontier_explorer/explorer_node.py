@@ -93,7 +93,7 @@ class FrontierExplorer(Node):
         sub(UInt8, '/px4_odom_bridge/state', self.on_bridge, sensor)
         sub(String, '/go_to_with_avoidance/alert', lambda m: self.alerts_in.append(m.data), 10)
         sub(String, '/go_to_with_avoidance/status', self.on_planner_status, 10)
-        sub(Odometry, '/Odometry', self.on_lio_odom, sensor)
+        sub(Odometry, p.lio_odom_topic, self.on_lio_odom, sensor)
 
         self.goal_pub = self.create_publisher(PoseStamped, '/go_to_with_avoidance/goal', 10)
         self.hover_pub = self.create_publisher(Empty, '/go_to_with_avoidance/hover_request', 10)

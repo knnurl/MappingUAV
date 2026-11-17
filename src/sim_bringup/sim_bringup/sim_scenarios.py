@@ -105,7 +105,20 @@ def lio_fault(kind):
     return run
 
 
-SCENARIOS = {'hover_cancel': hover_cancel, 'takeover': takeover,
+def lio_degenerate(s):
+    """Fork naming only (lio:=fork): odometry stays alive, native health goes bad."""
+    s.airborne()
+    s.fault_pub.publish(String(data='degenerate'))
+    assert s.wait(lambda: any('lio_health' in a or 'LIO' in a for a in s.planner), 5.0), \
+        s.planner[-3:]
+    s.spin(2.0)
+    drift = s.moved_over(4.0)
+    assert drift < 0.15, f'vehicle kept moving: {drift:.2f} m'
+    assert 'OFFBOARD' in s.px4 and 'armed=True' in s.px4, s.px4
+    return f'planner stopped ({s.planner[-1][:60]}), vehicle holding, drift {drift:.3f} m, no landing'
+
+
+SCENARIOS = {'hover_cancel': hover_cancel, 'takeover': takeover, 'lio_degenerate': lio_degenerate,
              'lio_jump': lio_fault('jump'), 'lio_silent': lio_fault('silent')}
 
 

@@ -1,9 +1,10 @@
 # filepath: deploy/systemd/drone-autonomy.service
-# Aerostack2 + planner + geofence watchdog. THE ENABLE/DISABLE TOGGLE OF THIS
-# UNIT IS THE ON-VEHICLE SOFTWARE KILL FOR AUTONOMY (masterplan WP-G).
+# Geofence watchdog, and per /etc/default/drone-stack the map, planner and
+# explorer. Aerostack2 is drone-as2.service. THE ENABLE/DISABLE TOGGLE OF
+# drone-as2 AND THIS UNIT IS THE ON-VEHICLE SOFTWARE KILL FOR AUTONOMY (WP-G).
 # Ships disabled; integration requires the gate5 token.
 [Unit]
-Description=Drone: autonomy layer (AS2 + planner + geofence watchdog)
+Description=Drone: geofence watchdog, map, planner, explorer
 After=drone-perception.service
 Requires=drone-perception.service
 

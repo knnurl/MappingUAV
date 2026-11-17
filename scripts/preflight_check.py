@@ -43,7 +43,7 @@ class Check(Node):
         self.watch('/geofence/state', UInt8, q)
         from nav_msgs.msg import Odometry
         from px4_msgs.msg import VehicleLocalPosition, VehicleStatus
-        self.watch('/Odometry', Odometry, q)
+        self.watch(args.lio_odom_topic, Odometry, q)
         self.watch('/fmu/out/vehicle_local_position', VehicleLocalPosition, q)
         self.watch('/fmu/out/vehicle_status', VehicleStatus, q)
         ns = args.namespace
@@ -98,7 +98,7 @@ def run(args):
 
     rate = {t: n / args.listen for t, n in c.count.items()}
     # --- estimation
-    lio = rate.get('/Odometry', 0.0)
+    lio = rate.get(args.lio_odom_topic, 0.0)
     check('LIO odometry arriving at about 10 Hz', 7.0 <= lio <= 13.0, f'{lio:.1f} Hz')
     st = seen('/px4_odom_bridge/state')
     status = seen('/px4_odom_bridge/status')
@@ -191,6 +191,8 @@ def main():
     ap.add_argument('--namespace', default='drone0')
     ap.add_argument('--venue-params', default=DEFAULT_VENUE)
     ap.add_argument('--min-battery', type=float, default=0.5)
+    ap.add_argument('--lio-odom-topic', default='/Odometry',
+                    help='/fastlio2/lio_odom when the fork runs')
     ap.add_argument('--listen', type=float, default=6.0, help='seconds to listen')
     args = ap.parse_args()
     rclpy.init()

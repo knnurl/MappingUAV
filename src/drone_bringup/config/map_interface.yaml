@@ -34,4 +34,8 @@ map_saver:
     checkpoint_period_s: 20.0  # a crash loses at most this much
     min_free_gb: 4.0
     output_dir: ""             # default ~/map_exports/session_<time>/
-    cloud_topic: /cloud_registered
+    keyframes: true            # body-frame scans + poses for offline refinement
+    keyframe_distance_m: 0.5
+    keyframe_angle_deg: 15.0
+    keyframe_voxel_m: 0.1
+    max_keyframes: 2000

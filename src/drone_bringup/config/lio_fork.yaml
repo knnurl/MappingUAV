@@ -1,0 +1,9 @@
+# filepath: src/drone_bringup/config/lio_fork.yaml
+# LIO stack selection: the fork knnurl/FASTLIO2_ROS2 (lio_node in namespace
+# /fastlio2). NOT FLIGHT-APPROVED until the Gate 2 and Gate 3 checks have been
+# re-run on it (docs/lio_swap_runbook.txt). See lio_upstream.yaml.
+/**:
+  ros__parameters:
+    lio_odom_topic: /fastlio2/lio_odom
+    lio_cloud_topic: /fastlio2/world_cloud
+    lio_health_topic: /fastlio2/lio_health

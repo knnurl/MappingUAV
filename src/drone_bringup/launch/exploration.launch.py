@@ -20,7 +20,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 
 
@@ -28,26 +28,30 @@ def generate_launch_description():
     cfg = os.path.join(get_package_share_directory('drone_bringup'), 'config')
     venue = LaunchConfiguration('venue_params')
     map_cfg = os.path.join(cfg, 'map_interface.yaml')
+    lio_params = PathJoinSubstitution([cfg, ['lio_', LaunchConfiguration('lio'), '.yaml']])
     return LaunchDescription([
         DeclareLaunchArgument(
             'venue_params', default_value=os.path.join(cfg, 'venue_params.yaml')),
         DeclareLaunchArgument('explorer', default_value='false'),
+        DeclareLaunchArgument('lio', default_value='upstream',
+                              description='upstream (hku-mars FAST_LIO) or fork (FASTLIO2_ROS2)'),
         DeclareLaunchArgument('save_map', default_value='true'),
         # ~/.local carries a numpy 2 that breaks the system scipy the explorer
         # and planner use (found 2026-11-16).
         SetEnvironmentVariable('PYTHONNOUSERSITE', '1'),
         Node(package='map_interface', executable='map_server_node', name='map_interface',
-             output='screen', parameters=[map_cfg, venue]),
+             output='screen', parameters=[map_cfg, venue, lio_params]),
         Node(package='map_interface', executable='map_saver_node', name='map_saver',
-             output='screen', parameters=[map_cfg],
+             output='screen', parameters=[map_cfg, lio_params],
              condition=IfCondition(LaunchConfiguration('save_map'))),
         Node(package='lio_health_guard', executable='guard_node', name='lio_health_guard',
-             output='screen'),
+             output='screen', parameters=[lio_params]),
         Node(package='planner_shim', executable='go_to_with_avoidance',
              name='go_to_with_avoidance', output='screen',
              parameters=[os.path.join(cfg, 'planning', 'go_to_with_avoidance.yaml'), venue]),
         Node(package='frontier_explorer', executable='explorer_node',
              name='frontier_explorer', output='screen',
-             parameters=[os.path.join(cfg, 'exploration', 'frontier_explorer.yaml'), venue],
+             parameters=[os.path.join(cfg, 'exploration', 'frontier_explorer.yaml'), venue,
+                         lio_params],
              condition=IfCondition(LaunchConfiguration('explorer'))),
     ])

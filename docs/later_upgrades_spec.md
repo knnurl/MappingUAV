@@ -208,8 +208,11 @@ clouds, not just the merged map. `map_saver_node` gains a second output: every `
 odometry pose as `keyframes/<n>.pcd` + a line in `poses.txt`. Bounded by `max_keyframes`. Key decision:
 body-frame scans, because a corrected pose can then re-place them; the world-frame chunk output stays as
 the quick-look product.
-Cost estimate: about 3,000 points per keyframe, 36 kB; 500 keyframes for a large venue is 18 MB.
-[VERIFY the scan size after thinning on a real bag.] Needs FAST-LIO's body-frame cloud: upstream has
+**Built 2026-11-17** in `map_saver_node` (`keyframes/kf_<n>.pcd` + `poses.txt`). Measured on the hallway
+recording through the fork (21.6 m of path): 95 keyframes, about 5,000 points and 60 kB each, 5.7 MB in
+total; scans re-placed with their poses line up (median nearest-neighbour distance 0.15 to 0.24 m between
+scans 0.6 to 1.6 m apart, against 0.8 to 1.7 m without the poses). `map_saver_node` used 11 % of a core fed
+with the fork's full-resolution world cloud (1.3 % with upstream's downsampled cloud, without keyframes). Needs FAST-LIO's body-frame cloud: upstream has
 `scan_bodyframe_pub_en`, the fork has `publish_body_cloud`; each costs a cloud copy per scan (measure).
 
 **C-2: offline refinement (after landing, on the Jetson or the ground station).** A script

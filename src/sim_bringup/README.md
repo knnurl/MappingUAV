@@ -47,8 +47,15 @@ log severity at one call site (the watchdog on a soft breach followed by a hard 
 What the rig showed about Aerostack2 1.1.3 (still to be seen on the vehicle): the action is
 `/drone0/FollowPathBehavior`, it accepts `frame_id: earth`, and cancelling it leaves the vehicle holding.
 
+## Fork naming
+
+`ros2 launch sim_bringup sim.launch.py lio:=fork` makes the fake LiDAR publish under the fork's topic
+names and its health message (the fork's `interface` package must be sourced). 2026-11-16: mission
+complete; `lio_jump` lands; `hover_cancel` holds; `lio_degenerate` (odometry alive, native health bad)
+stops the planner and the vehicle holds without landing. The fork's filter is not in this loop.
+
 ## Test hooks
 
 `/sim/pilot_takeover` (Empty), `/sim/kill` (Empty), `/sim/battery` (Float32, 0..1),
-`/sim/lio_fault` (String: `silent`, `jump`, `ok`), `/sim/px4_state` (String, read-only).
+`/sim/lio_fault` (String: `silent`, `jump`, `ok`, and `degenerate` with `lio:=fork`), `/sim/px4_state` (String, read-only).
 Worlds: `two_rooms`, `one_room_pillar` (`world:=`); the venue file is for `two_rooms`.

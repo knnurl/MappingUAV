@@ -33,3 +33,9 @@ repositories:
     type: git
     url: https://github.com/ZJU-FAST-Lab/ego-planner-swarm.git
     version: 23a8d5a191711dd65633df689bd00f55d4dea8f9   # official ros2_version branch @ 2025-03-08; COLCON_IGNORE uav_simulator (except Utils/quadrotor_msgs, Utils/cmake_utils), drone_detect, rosmsg_tcp_bridge
+  # Optional LIO stack, selected with lio:=fork (docs/lio_swap_runbook.txt). Not imported by
+  # default: build packages `interface` and `fastlio2` from it in a separate workspace.
+  # FASTLIO2_ROS2:
+  #   type: git
+  #   url: https://github.com/knnurl/FASTLIO2_ROS2.git
+  #   version: 1abee84   # branch b1-health (health signal), awaiting merge to main
