@@ -90,8 +90,10 @@ runbook.
 | 6 | Planner in the loop | closed-loop `go_to_with_avoidance`; compute ceiling measured |
 | 7 | Exploration | autonomous exploration in the geofence; entry requires a deliberate watchdog trip test |
 
-Verification helpers: `scripts/verify_gate1.sh` … `verify_gate3.sh` and
-[`docs/gate4_prep_checklist.txt`](docs/gate4_prep_checklist.txt). Anything that
+Verification helpers: `scripts/verify_gate1.sh` … `verify_gate3.sh`,
+`scripts/param_check.py` (FC parameter dump against the expected values),
+[`docs/gate4_prep_checklist.txt`](docs/gate4_prep_checklist.txt) and
+[`docs/gate4_runbook.txt`](docs/gate4_runbook.txt). Anything that
 cannot be tested without a simulator or the vehicle is logged as verification
 debt (`docs/verification_debt.yaml` on the work-package branches).
 
@@ -110,14 +112,23 @@ debt (`docs/verification_debt.yaml` on the work-package branches).
 docs. Each Phase 3–7 work package lives on its own branch and is merged only
 when its gate token is confirmed, so these are unmerged by design.
 
-| Branch | Work package | Status |
+| Branch | Contents | Status (2026-11-17) |
 |---|---|---|
-| `wp-e-geofence-watchdog` | Geofence watchdog (safety-critical) | VERIFIED: 47 unit tests, zero debt |
-| `wp-g-ops` | systemd boot chain, flight-session recorder | VERIFIED at host level (1 debt entry) |
-| `wp-c-mapping` | `map_interface` + CPU grid, `map_export` | VERIFIED on synthetic clouds (real-data debt open) |
+| `wp-h-sim` | **Integration branch: later gates merge from here.** Everything below plus the closed-loop rig, the single flight bringup, the pre-flight check and the Gate 5-7 runbooks | Rig mission and failure scenarios pass; nothing flown |
+| `lio-swap-prep` | `wp-h-sim` plus `lio:=upstream\|fork`, EV guard step budget, keyframe recorder, systemd units, CI | Merged into `wp-h-sim` |
+| `wp-e-geofence-watchdog` | Geofence watchdog (safety-critical) | VERIFIED: 73 tests, zero debt |
+| `wp-g-ops` | systemd units, flight-session recorder | VERIFIED at host level |
+| `wp-c-mapping` | `map_interface` (OctoMap + distance field), in-flight map saver | Unit tests + replay on a real bench bag |
+| `wp-b-as2` | Aerostack2 configuration, offboard hold patch for `as2_platform_pixhawk` | BUILT_UNVERIFIED |
+| `wp-f-frontier` | Planner (`go_to_with_avoidance`: grid path flown by Aerostack2 FollowPath) and `frontier_explorer` | BUILT_UNVERIFIED |
+| `wp-d-planner` | Same planner commit as `wp-f-frontier` (kept for the branch-per-package rule) | BUILT_UNVERIFIED |
 | `wp-f-dp2-survey` | FUEL vs TARE survey | EVIDENCE_ONLY |
-| `wp-b-as2` | Aerostack2 skeleton, `as2_platform_pixhawk` | BUILT_UNVERIFIED |
-| `wp-d-planner` | EGO-Planner-v2 pipeline, `planner_shim`, `lio_health_guard` | BUILT_UNVERIFIED |
+
+Where the project stands: Gates 1 to 3 are passed on the bench; Gate 4 (tethered hover) is next and waits
+on hardware work, not software ([`docs/gate4_runbook.txt`](docs/gate4_runbook.txt)). The planner at Gate 6 is
+a grid path on the occupancy map, not EGO-Planner (kept pinned as a later upgrade). The LiDAR-inertial
+odometry can be switched to the fork [knnurl/FASTLIO2_ROS2](https://github.com/knnurl/FASTLIO2_ROS2) with one
+launch argument once its bench checks are re-run.
 
 ## Repository layout (`main`)
 
@@ -180,6 +191,7 @@ never runs on the vehicle. Over WiFi, view the camera through compressed
 
 ## Documentation
 
+- [`docs/agent_handoff_2026-11-17.md`](docs/agent_handoff_2026-11-17.md): where everything is and what is next
 - [`docs/px4_reflash_runbook.md`](docs/px4_reflash_runbook.md): ArduPilot → PX4 migration record (completed 2026-09-13)
 - [`docs/build_report_gates1-4.md`](docs/build_report_gates1-4.md): build and discrepancy report
 - [`docs/pinned_versions.md`](docs/pinned_versions.md): third-party pins

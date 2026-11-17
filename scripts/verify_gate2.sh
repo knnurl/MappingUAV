@@ -9,9 +9,10 @@
 # stack is up:  ros2 launch drone_bringup gate2_lio.launch.py
 # The Livox driver ignores Ctrl-C after a failed start; launch kills it after ~15 s.
 # DDS environment: this must match the running stack. If the bench stack was started
-# loopback-only (ROS_LOCALHOST_ONLY=1 with CYCLONEDDS_URI unset, e.g. because the WiFi
+# loopback-only (ROS_LOCALHOST_ONLY=1 with the bench DDS config, e.g. because the WiFi
 # roamed and CycloneDDS bound a stale address), run this the same way:
-#   env -u CYCLONEDDS_URI ROS_LOCALHOST_ONLY=1 scripts/verify_gate2.sh
+#   CYCLONEDDS_URI=file://$HOME/colcon_ws/src/drone_bringup/config/cyclonedds_bench.xml \
+#     ROS_LOCALHOST_ONLY=1 scripts/verify_gate2.sh
 # Otherwise it discovers nothing and silently records or measures nothing.
 set -e
 source ~/colcon_ws/install/setup.bash

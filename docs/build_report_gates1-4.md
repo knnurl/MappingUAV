@@ -54,12 +54,3 @@ installed to /usr/local. ROS 2 Humble desktop installed (was absent).
 - `MicroXRCEAgent serial --dev /dev/ttyTHS1 -b 921600`: transport init OK. PASS.
 - gate3 static TF publishers: argument style accepted, 9.99 placeholders
   publish. PASS.
-
-## Outstanding before Gate 1/2 can PASS (physical/operator steps)
-1. Wire Pixhawk TELEM2 ↔ Jetson 40-pin UART (ttyTHS1: pin8 TX, pin10 RX, cross, GND).
-2. Apply `config/px4/gate3_ekf2.params` via QGC (UXRCE_DDS_CFG=TELEM2, etc.), reboot FC.
-3. Connect Mid-360, then switch Ethernet to the lidar subnet:
-   `sudo nmcli con add type ethernet ifname enP8p1s0 con-name livox-static ipv4.method manual ipv4.addresses 192.168.1.5/24 ipv4.gateway "" && sudo nmcli con up livox-static`
-4. Log out/in (dialout group), then run `scripts/verify_gate1.sh` / `verify_gate2.sh`.
-5. [MEASURE] items still open: lidar mount offset for gate3 TF (9.99 placeholders),
-   `SENS_FLOW_ROT` for HereFlow.

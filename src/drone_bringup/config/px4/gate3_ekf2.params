@@ -26,7 +26,9 @@ EKF2_BARO_CTRL    1        # baro stays as a consistency aid, NOT height referen
 
 # ---- Optical flow (HereFlow, DroneCAN) as divergence backstop ----
 UAVCAN_ENABLE     2        # sensors automatic [VERIFY: 2 vs 3 per firmware docs]
-EKF2_OF_CTRL      1
+EKF2_OF_CTRL      0        # flow DISABLED 2026-10-13: 28-35 cm excursions and a reset in the A/B
+                           # test (gate3 transcript section 14). Was 1. Re-enable only after
+                           # SENS_FLOW_ROT is measured and the A/B test repeated.
 SENS_FLOW_ROT     0        # [MEASURE]: HereFlow mounting yaw on the X500
 EKF2_RNG_CTRL     1        # rangefinder conditional aiding: terrain/landing, NOT height ref
 

@@ -1,6 +1,9 @@
 <!-- filepath: docs/agent_handoff_2026-09-13.md -->
 # Agent Handoff: Project State as of 2026-09-13
 
+> **SUPERSEDED by [`agent_handoff_2026-11-17.md`](agent_handoff_2026-11-17.md).** Kept as the record of the
+> September state; its operator rules and environment gotchas still hold.
+
 For the next agent session. Read this first, then `README.md`, `docs/gate_status.yaml` (local), and the governing specs in `docs/ProgressReport/`.
 
 ## 1. Operator rules (do not break)

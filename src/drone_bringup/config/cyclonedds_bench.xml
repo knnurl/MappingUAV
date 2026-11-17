@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Bench config, for use with ROS_LOCALHOST_ONLY=1 (which selects loopback; do
+     not list an interface here, or "lo" is selected twice and every node fails).
+     The lab WiFi roams between SSIDs, which breaks CycloneDDS mid-session, so
+     bench runs keep off wlP1p1s0. The stack, the recorder and every check must
+     share this environment:
+       CYCLONEDDS_URI=file://$HOME/colcon_ws/src/drone_bringup/config/cyclonedds_bench.xml ROS_LOCALHOST_ONLY=1 ... -->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain Id="any">
+    <Discovery>
+      <!-- Same participant cap as cyclonedds.xml; see the note there. -->
+      <MaxAutoParticipantIndex>50</MaxAutoParticipantIndex>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

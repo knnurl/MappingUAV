@@ -16,6 +16,12 @@
       </Interfaces>
       <MaxMessageSize>65500B</MaxMessageSize>
     </General>
+    <Discovery>
+      <!-- Without multicast each ROS process takes a participant index, and the
+           default cap of 9 left the bench chain + recorder + checks at the
+           limit; the AS2 nodes at Gate 5 would exceed it. -->
+      <MaxAutoParticipantIndex>50</MaxAutoParticipantIndex>
+    </Discovery>
     <Internal>
       <SocketReceiveBufferSize min="2MB" max="8MB"/>
       <Watermarks>

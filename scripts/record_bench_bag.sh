@@ -15,9 +15,10 @@
 # (bench-specific) instructs it for Gate 2/3 bench sessions. Check /Odometry stays
 # ~10 Hz while recording; if it doesn't, record only /livox/lidar and /livox/imu.
 # DDS environment: this must match the running stack. If the bench stack was started
-# loopback-only (ROS_LOCALHOST_ONLY=1 with CYCLONEDDS_URI unset, e.g. because the WiFi
+# loopback-only (ROS_LOCALHOST_ONLY=1 with the bench DDS config, e.g. because the WiFi
 # roamed and CycloneDDS bound a stale address), run this the same way:
-#   env -u CYCLONEDDS_URI ROS_LOCALHOST_ONLY=1 scripts/record_bench_bag.sh gate2 walk
+#   CYCLONEDDS_URI=file://$HOME/colcon_ws/src/drone_bringup/config/cyclonedds_bench.xml \
+#     ROS_LOCALHOST_ONLY=1 scripts/record_bench_bag.sh gate2 walk
 # Otherwise it discovers nothing and silently records or measures nothing.
 set -eo pipefail
 source ~/colcon_ws/install/setup.bash
