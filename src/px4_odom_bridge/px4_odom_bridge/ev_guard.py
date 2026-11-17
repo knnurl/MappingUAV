@@ -53,11 +53,18 @@ class GuardConfig:
     max_radius_m: float = 20.0
     quat_tolerance: float = 0.01
     warn_step_m: float = 0.10
+    # Step budget after a longer gap (spec §9.2, built 2026-11-17). A fixed
+    # max_step_m is 3 m/s at 10 Hz but 0.6 m/s if the stream dips to 2 Hz, so
+    # legitimate motion during a rate dip latched the guard. The budget is
+    # max_step_m for a gap up to nominal_period_s and grows with the extra gap
+    # at max_speed_m_s (1.5 x the vehicle's 1.0 m/s limit).
+    max_speed_m_s: float = 1.5
+    nominal_period_s: float = 0.10
 
     def validate(self) -> None:
         """Raise ValueError on any unusable threshold; the node refuses to start."""
         for name in ('max_step_m', 'max_gap_s', 'max_radius_m', 'quat_tolerance',
-                     'warn_step_m'):
+                     'warn_step_m', 'max_speed_m_s', 'nominal_period_s'):
             value = getattr(self, name)
             if not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0.0:
                 raise ValueError(f'{name} must be a finite number > 0, got {value!r}')
@@ -125,10 +132,11 @@ class EvGuard:
                     f'{gap:.2f} s gap in the LIO stream exceeds max_gap_s '
                     f'{self.config.max_gap_s:.2f} s; a restarted FAST-LIO has a new origin')
             step = math.dist(position, self._last_position)
-            if step > self.config.max_step_m:
+            budget = self.step_budget(gap)
+            if step > budget:
                 return self._block(
-                    f'position jumped {step:.2f} m in {gap:.3f} s, exceeding max_step_m '
-                    f'{self.config.max_step_m:.2f} m')
+                    f'position jumped {step:.2f} m in {gap:.3f} s, exceeding the step budget '
+                    f'{budget:.2f} m (max_step_m {self.config.max_step_m:.2f} m)')
             if step > self.config.warn_step_m:
                 warning = f'position step {step * 100:.0f} cm'
                 self.counts.warned += 1
@@ -138,6 +146,12 @@ class EvGuard:
         self.state = State.FORWARDING
         self.counts.forwarded += 1
         return Decision(True, self.state, '', warning)
+
+    def step_budget(self, gap_s: float) -> float:
+        """Largest believable step after gap_s: max_step_m at the nominal rate,
+        plus max_speed_m_s for every second beyond the nominal period."""
+        extra = max(0.0, gap_s - self.config.nominal_period_s)
+        return self.config.max_step_m + self.config.max_speed_m_s * extra
 
     def _block(self, reason: str) -> Decision:
         self.state = State.BLOCKED
@@ -157,3 +171,41 @@ class EvGuard:
         text = (f'{self.reported_state(now_s).value} forwarded={self.counts.forwarded} '
                 f'rejected={self.counts.rejected} warned={self.counts.warned}')
         return f'{text} reason={self.reason}' if self.reason else text
+
+
+class HealthPairer:
+    """Pairs each odometry sample with the LIO health message of the same stamp
+    (the FAST-LIO fork publishes health right after the odometry). Pure logic.
+
+    offer(stamp, sample) holds a sample; verdict(stamp, valid) releases it.
+    Returns a list of (sample, forward: bool, why) to act on:
+      - health says valid   -> forward
+      - health says invalid -> do not forward (the pose is IMU prediction only)
+      - the next odometry arrives first (health lost) -> forward the held one;
+        a lost health message must not cut external vision. The health guard
+        treats health silence as DEGRADED on its own.
+    """
+
+    def __init__(self, tolerance_s: float = 0.005):
+        self.tolerance_s = tolerance_s
+        self._held = None            # (stamp, sample)
+        self.invalid = 0
+        self.unpaired = 0
+
+    def offer(self, stamp_s: float, sample):
+        out = []
+        if self._held is not None:
+            self.unpaired += 1
+            out.append((self._held[1], True, 'no health message for this sample'))
+        self._held = (stamp_s, sample)
+        return out
+
+    def verdict(self, stamp_s: float, valid: bool):
+        if self._held is None or abs(self._held[0] - stamp_s) > self.tolerance_s:
+            return []
+        sample = self._held[1]
+        self._held = None
+        if valid:
+            return [(sample, True, '')]
+        self.invalid += 1
+        return [(sample, False, 'LIO reports no matched points for this scan')]

@@ -43,7 +43,7 @@ from nav_msgs.msg import Odometry
 from px4_msgs.msg import VehicleOdometry
 from std_msgs.msg import String, UInt8
 
-from px4_odom_bridge.ev_guard import EvGuard, GuardConfig, State
+from px4_odom_bridge.ev_guard import EvGuard, GuardConfig, HealthPairer, State
 
 EV_TOPIC = '/fmu/in/vehicle_visual_odometry'
 STATUS_TOPIC = '/px4_odom_bridge/status'
@@ -113,6 +113,8 @@ class OdomBridge(Node):
             max_radius_m=float(self.declare_parameter('ev_max_radius_m', 20.0).value),
             quat_tolerance=float(self.declare_parameter('ev_quat_tolerance', 0.01).value),
             warn_step_m=float(self.declare_parameter('ev_warn_step_m', 0.10).value),
+            max_speed_m_s=float(self.declare_parameter('ev_max_speed_m_s', 1.5).value),
+            nominal_period_s=float(self.declare_parameter('ev_nominal_period_s', 0.10).value),
         )
         try:
             self.guard = EvGuard(guard_config)
@@ -131,6 +133,15 @@ class OdomBridge(Node):
         # agent-side subscriber. Do not change to BEST_EFFORT.
         self.pub = self.create_publisher(VehicleOdometry, EV_TOPIC, 10)
         self.sub = self.create_subscription(Odometry, topic, self.cb, sub_qos)
+        # The FAST-LIO fork's per-scan health (config/lio_fork.yaml). A scan with no
+        # matched points is IMU prediction only and is not forwarded.
+        self.pairer = None
+        health_topic = self.declare_parameter('lio_health_topic', '').value
+        if health_topic:
+            from interface.msg import LioHealth   # exists only where the fork is installed
+            self.pairer = HealthPairer()
+            self.create_subscription(LioHealth, health_topic, self.on_health, sub_qos)
+            self.get_logger().info(f'Pairing samples with LIO health on {health_topic}')
 
         self.status_pub = self.create_publisher(String, STATUS_TOPIC, 10)
         self.state_pub = self.create_publisher(UInt8, STATE_TOPIC, 10)
@@ -145,10 +156,31 @@ class OdomBridge(Node):
         self.get_logger().info(f'Bridging {topic} -> {EV_TOPIC}')
         self.get_logger().info(
             f'EV guard: max step {guard_config.max_step_m} m, max gap {guard_config.max_gap_s} s, '
-            f'max radius {guard_config.max_radius_m} m. The radius bounds operation: raise it '
-            'for a venue, sized with the geofence and map bounds.')
+            f'max radius {guard_config.max_radius_m} m. The radius is an implausibility bound, '
+            'not a geofence: scripts/venue_boxes.py sets it well beyond the venue.')
 
     def cb(self, odom: Odometry):
+        """With a health topic configured, each sample waits (a few ms) for the
+        health message of the same stamp; without one it is handled at once."""
+        if self.pairer is None:
+            self.forward_sample(odom)
+            return
+        stamp = stamp_to_us(odom.header.stamp) / 1e6
+        self.act(self.pairer.offer(stamp, odom))
+
+    def on_health(self, msg):
+        self.act(self.pairer.verdict(stamp_to_us(msg.header.stamp) / 1e6, bool(msg.valid)))
+
+    def act(self, verdicts):
+        for odom, forward, why in verdicts:
+            if forward:
+                self.forward_sample(odom)
+            else:
+                self.drop_count += 1
+                self.get_logger().warn(f'EV sample not forwarded: {why}',
+                                       throttle_duration_sec=1.0)
+
+    def forward_sample(self, odom: Odometry):
         now_us = int(self.get_clock().now().nanoseconds / 1000)
         sample_us = stamp_to_us(odom.header.stamp)
         if not sample_age_ok(sample_us, now_us, self.max_age_us):

@@ -6,12 +6,12 @@ Description=Drone: Micro XRCE-DDS agent on TELEM2 (FTDI cable)
 After=drone-clocks.service
 Wants=drone-clocks.service
 
-# Device: the FTDI cable in use since 2026-10-27 (operator). If the cable
-# changes, this path changes: check ls /dev/serial/by-id/.
+# Device: DRONE_SERIAL_DEV in /etc/default/drone-stack (deploy/systemd/drone-stack.env).
 [Service]
 User=neric
 Environment=HOME=/home/neric
-ExecStart=/usr/local/bin/MicroXRCEAgent serial --dev /dev/serial/by-id/usb-FTDI_TTL232RG-VSW3V3_FTADW2E6-if00-port0 -b 921600
+EnvironmentFile=-/etc/default/drone-stack
+ExecStart=/usr/local/bin/MicroXRCEAgent serial --dev ${DRONE_SERIAL_DEV} -b 921600
 Restart=on-failure
 RestartSec=2
 # journald flood guard:

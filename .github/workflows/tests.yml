@@ -1,0 +1,19 @@
+# filepath: .github/workflows/tests.yml
+# Tier 1: every test that needs no ROS installation (pure logic, static
+# contracts, scripts). The node tests, the C++ tests and the closed-loop rig
+# need ROS 2 Humble with Aerostack2 and px4_msgs and are run on the Jetson
+# (scripts/run_all_tests.sh); they are NOT covered here.
+name: tests
+on:
+  push:
+  pull_request:
+jobs:
+  pure:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install "numpy<2" "scipy<1.12" hypothesis pytest pyyaml
+      - run: bash scripts/run_pure_tests.sh

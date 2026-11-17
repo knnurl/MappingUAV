@@ -38,7 +38,7 @@ ament_target_dependencies(map_server_node
 
 add_executable(map_saver_node src/map_saver_node.cpp)
 target_include_directories(map_saver_node PRIVATE include)
-ament_target_dependencies(map_saver_node rclcpp sensor_msgs)
+ament_target_dependencies(map_saver_node rclcpp sensor_msgs nav_msgs)
 install(TARGETS map_server_node map_saver_node DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 
@@ -52,6 +52,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_map_core
     ${OCTOMAP_LIBRARIES}
     ${DYNAMICEDT3D_LIBRARIES})
+  ament_add_gtest(test_keyframes test/test_keyframes.cpp)
+  target_include_directories(test_keyframes PRIVATE include)
   ament_add_gtest(test_voxel_accumulator test/test_voxel_accumulator.cpp)
   target_include_directories(test_voxel_accumulator PRIVATE include)
 endif()

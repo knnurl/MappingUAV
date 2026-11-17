@@ -9,6 +9,7 @@
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>action_msgs</depend>
   <depend>as2_msgs</depend>
   <depend>map_interface</depend>

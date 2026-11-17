@@ -244,9 +244,12 @@ def remaining_waypoints(waypoints_xy, robot_xy, reach_m):
 
 
 def stop_reason(now, *, pose_t, pose_timeout_s, lio_state, lio_t, lio_timeout_s,
-                platform_t, platform_timeout_s, offboard, flying):
+                platform_t, platform_timeout_s, offboard, flying,
+                battery=None, battery_min=0.0):
     """Why motion must not start or must stop; '' if nothing forbids it.
 
+    battery: fraction 0..1 or None when no battery state has been received (no
+    rule then: the explorer, not the planner, insists on a battery topic).
     lio_state: 0 OK, 1 DEGRADED, None never received. Times are seconds on the
     caller's clock, None when never received. Silence counts as a fault: a
     health monitor that has died cannot vouch for anything.
@@ -264,4 +267,6 @@ def stop_reason(now, *, pose_t, pose_timeout_s, lio_state, lio_t, lio_timeout_s,
                 'platform node must be restarted)')
     if not flying:
         return 'platform is not FLYING'
+    if battery is not None and battery < battery_min:
+        return f'battery {battery:.0%} below {battery_min:.0%}'
     return ''

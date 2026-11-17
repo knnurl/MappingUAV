@@ -26,8 +26,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, LogInfo
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
-from launch_ros.actions import Node
+from launch.substitutions import LaunchConfiguration, PythonExpression
 
 
 def generate_launch_description():
@@ -39,7 +38,6 @@ def generate_launch_description():
     mapping = LaunchConfiguration('mapping')
     explorer = LaunchConfiguration('explorer')
     lio = LaunchConfiguration('lio')
-    lio_params = PathJoinSubstitution([cfg, ['lio_', LaunchConfiguration('lio'), '.yaml']])
 
     def include(name, **args):
         return PythonLaunchDescriptionSource(os.path.join(launch_dir, name)), args
@@ -47,18 +45,14 @@ def generate_launch_description():
     src, args = include('gate3_fusion.launch.py')
     perception = IncludeLaunchDescription(
         src, launch_arguments={'serial_dev': LaunchConfiguration('serial_dev'), 'lio': lio}.items())
-    watchdog = Node(
-        package='geofence_watchdog', executable='watchdog_node', name='geofence_watchdog',
-        output='screen',
-        parameters=[os.path.join(cfg, 'geofence.yaml'), venue, lio_params,
-                    {'require_streams_after_s': 10.0}])
     src, _ = include('gate5_as2.launch.py')
     as2_stack = IncludeLaunchDescription(src, condition=IfCondition(as2))
-    src, _ = include('exploration.launch.py')
+    # Watchdog always; map, planner and explorer per argument (autonomy.launch.py).
+    src, _ = include('autonomy.launch.py')
     autonomy = IncludeLaunchDescription(
-        src, condition=IfCondition(mapping),
-        launch_arguments={'venue_params': venue, 'explorer': explorer, 'lio': lio,
-                          'save_map': LaunchConfiguration('save_map')}.items())
+        src, launch_arguments={'venue_params': venue, 'lio': lio, 'mapping': mapping,
+                               'explorer': explorer,
+                               'save_map': LaunchConfiguration('save_map')}.items())
     bad_combo = PythonExpression([
         "'", explorer, "' == 'true' and not ('", as2, "' == 'true' and '", mapping,
         "' == 'true')"])
@@ -75,5 +69,5 @@ def generate_launch_description():
         LogInfo(condition=IfCondition(bad_combo),
                 msg='WARNING: explorer:=true needs as2:=true and mapping:=true; '
                     'the explorer will refuse to start a mission.'),
-        perception, watchdog, as2_stack, autonomy,
+        perception, autonomy, as2_stack,
     ])
