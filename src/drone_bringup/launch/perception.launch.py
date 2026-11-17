@@ -7,7 +7,8 @@ unit (drone-xrce-agent.service) so a perception crash never drops the FC link.
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
@@ -17,16 +18,17 @@ def generate_launch_description():
 
     lio = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_share, 'launch', 'gate2_lio.launch.py')))
+            os.path.join(bringup_share, 'launch', 'gate2_lio.launch.py')),
+        launch_arguments={'lio': LaunchConfiguration('lio')}.items())
+    lio_params = PathJoinSubstitution(
+        [bringup_share, 'config', ['lio_', LaunchConfiguration('lio'), '.yaml']])
 
     odom_bridge = Node(
         package='px4_odom_bridge',
         executable='odom_bridge_node',
         name='px4_odom_bridge',
         output='screen',
-        parameters=[{
-            'lio_odom_topic': '/Odometry',
-        }],
+        parameters=[lio_params],   # lio_odom_topic comes from config/lio_<name>.yaml
     )
 
     # Same TFs as gate3_fusion.launch.py (visualisation only; see the note
@@ -50,4 +52,6 @@ def generate_launch_description():
                    '--child-frame-id', 'odom'],
     )
 
-    return LaunchDescription([lio, odom_bridge, tf_base_to_livox, tf_map_to_odom])
+    return LaunchDescription([
+        DeclareLaunchArgument('lio', default_value='upstream'),
+        lio, odom_bridge, tf_base_to_livox, tf_map_to_odom])

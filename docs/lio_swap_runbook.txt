@@ -1,0 +1,94 @@
+# filepath: docs/lio_swap_runbook.txt
+# Swapping the LiDAR-inertial odometry from upstream FAST-LIO to the fork
+# knnurl/FASTLIO2_ROS2. HUMAN-EXECUTED on the hardware; the agent prepared the
+# software. Only the operator decides that the fork is flight-approved.
+#
+# Written 2026-11-16 against lio-swap-prep and fork branch b1-health (1abee84).
+
+WHAT THE SWAP IS NOW
+  One launch argument. Every launch file takes lio:=upstream|fork and loads
+  config/lio_<name>.yaml, the only place the LIO topics are named:
+              odometry              world cloud              health
+    upstream  /Odometry             /cloud_registered        (none; derived)
+    fork      /fastlio2/lio_odom    /fastlio2/world_cloud    /fastlio2/lio_health
+  Default everywhere: upstream. Nothing changes until lio:=fork is passed.
+
+WHY IT NEEDS HARDWARE
+  Gates 2 and 3 were passed on upstream. The fork has different filter code.
+  Operator decision 2026-10-26: upstream flies Gate 4; the fork swaps in
+  afterwards and the Gate 2 and Gate 3 checks are re-run on it.
+
+WHAT WAS CHECKED WITHOUT HARDWARE (2026-11-16)
+  - Fork replayed on three recordings: all scans valid, no odometry jumps
+    (fork docs/lio_health.md).
+  - Closed-loop rig with the fork's topic names and health message: full
+    exploration mission, LIO jump lands, degraded native health stops the
+    planner and the vehicle holds. The rig's fake LiDAR imitates the fork's
+    interface; the fork's filter itself was NOT in that loop.
+  - The fork's real lio_node replayed on the hallway recording into the real
+    map server and health guard (fork naming): the map fills from
+    /fastlio2/world_cloud; lio_node 41.6 % of a core with the world cloud on
+    (41-48 % without it on the same recording): no visible cost.
+  NOT checked: the fork live on the Mid-360, its stamps against the bridge's
+  0..0.5 s age window, its CPU with the world cloud on, vibration.
+
+PREREQUISITES
+[ ] P1 gate4_tethered_hover CONFIRMED on upstream (operator's sequencing).
+[ ] P2 Fork branch b1-health reviewed and merged to the fork's main.
+[ ] P3 Fork packages `interface` and `fastlio2` built and sourced in the
+       flight environment (they live in ~/fastlio2_ws today; record the
+       commit in docs/pinned_versions.md and deploy/third_party.repos).
+[ ] P4 This branch merged; build clean; tests: lio_health_guard 23,
+       frontier_explorer 186, planner_shim 62, geofence_watchdog 73.
+[ ] P5 Rig, vehicle off: sim.launch.py lio:=fork, sim_mission and the
+       scenarios lio_jump, lio_degenerate, hover_cancel pass.
+
+PART A: GATE 2 CHECKS ON THE FORK (props OFF, bench, nobody within 3 m)
+  ros2 launch drone_bringup gate2_lio.launch.py lio:=fork
+A1 Rates, 15 s each:  /livox/lidar 10 Hz, /livox/imu ~200 Hz,
+     /fastlio2/lio_odom ~10 Hz, /fastlio2/lio_health ~10 Hz.
+     (The fork publishes odometry only while something subscribes.)
+A2 Stationary 5 min after a 60 s settle: position noise and z drift.
+     Upstream reference: median 1.1 cm, max 2.6 cm, z drift ~0.001 cm/min.
+A3 Health while stationary:
+     ros2 topic echo /fastlio2/lio_health --field translation_degeneracy
+     Record min / median of translation_degeneracy, match_ratio,
+     residual_rms. EXPECT valid true throughout; values inside the envelope
+     in fork docs/lio_health.md (degeneracy >= 0.18, ratio >= 0.41,
+     residual <= 6.6 cm). Outside it: stop and report; the guard's limits
+     (0.08 / 0.25 / 10 cm) are provisional.
+A4 Carry a closed loop back to the mark. Return-to-start gap; compare with
+     upstream on the same loop the same day (the 2026-10-23 loop5 recording
+     gave the fork 0.4-3.5 cm less gap than upstream on four of five runs).
+A5 Compute: top for lio_node and the livox driver. Upstream reference:
+     FAST-LIO 28 % of a core, 174 MB total. Now WITH the world cloud:
+     start `ros2 topic hz /fastlio2/world_cloud` in another terminal and
+     record lio_node CPU again.
+
+PART B: GATE 3 CHECKS ON THE FORK (props OFF, FC powered)
+  ros2 launch drone_bringup gate3_fusion.launch.py lio:=fork serial_dev:=<FTDI>
+B1 bash scripts/verify_gate3.sh ; bridge log "Bridging /fastlio2/lio_odom".
+     Status FORWARDING, rejected=0, and NO "Dropping LIO odometry: stamp age"
+     warnings (the fork stamps with the scan end time; if these appear the
+     stamp convention differs: STOP).
+B2 Estimator flags as in the Gate 3 transcript section 2 (cs_ev_pos,
+     cs_ev_yaw, cs_ev_hgt true).
+B3 Sign and axis test by hand: forward, left, up, 90 deg clockwise yaw
+     (transcript sections 4, 5, 14). A frame error hides here.
+B4 PX4 estimate against LIO, still and moving, as in transcript section 14.
+     Upstream reference with flow off: still 1-2 cm; moving median 4.7 cm,
+     max 11.7 cm; zero resets.
+B5 15 min untouched: reset counters unchanged, status FORWARDING.
+B6 LiDAR power cut: guard STALE then BLOCKED (VD-011 behaviour holds).
+B7 Health guard: ros2 launch ... exploration.launch.py lio:=fork explorer:=false
+     guard log "native health from /fastlio2/lio_health"; /lio_health/state 0.
+     Cover the LiDAR with a box for 3 s: record what the health values and
+     /lio_health/state do (first look at a degraded reading on hardware).
+
+PART C: DECISION
+  Write docs/lio_swap_verification_<date>.md with the A and B numbers beside
+  the upstream references. The operator decides. If the fork is approved, the
+  flight commands in the gate runbooks gain lio:=fork; changing the default in
+  the launch files is a separate, explicit commit.
+
+ROLLBACK: drop lio:=fork. Nothing else was changed.

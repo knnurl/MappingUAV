@@ -34,4 +34,3 @@ map_saver:
     checkpoint_period_s: 20.0  # a crash loses at most this much
     min_free_gb: 4.0
     output_dir: ""             # default ~/map_exports/session_<time>/
-    cloud_topic: /cloud_registered

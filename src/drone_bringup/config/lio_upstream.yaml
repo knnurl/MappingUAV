@@ -1,0 +1,9 @@
+# filepath: src/drone_bringup/config/lio_upstream.yaml
+# LIO stack selection, loaded by every launch file as config/lio_<name>.yaml
+# (launch argument lio:=upstream|fork). THIS is the swap: nothing else names
+# these topics. upstream = hku-mars FAST_LIO, the stack Gates 2 and 3 passed on.
+/**:
+  ros__parameters:
+    lio_odom_topic: /Odometry
+    lio_cloud_topic: /cloud_registered
+    lio_health_topic: ""          # upstream publishes no health; the guard derives it

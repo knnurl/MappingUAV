@@ -6,6 +6,7 @@
 | px4_msgs | github.com/PX4/px4_msgs | `a1045ec4` (release/1.15) | Must match flashed PX4 v1.15.x firmware |
 | livox_ros_driver2 | github.com/Livox-SDK/livox_ros_driver2 | `13eb05e4` (master) | Built 2026-07-04; params verified against source |
 | FAST_LIO | github.com/hku-mars/FAST_LIO | `a4743b09` (ROS2) + ikd-Tree `e2e3f4e9` | ROS2 branch; config keys verified against its mid360.yaml |
+| FASTLIO2_ROS2 (fork, optional: `lio:=fork`) | github.com/knnurl/FASTLIO2_ROS2 | `b1-health` 1abee84 on main d350196 (not merged; packages `interface`, `fastlio2` only) | Selected by launch argument, default upstream. Not flight-approved until docs/lio_swap_runbook.txt is run. Built in ~/fastlio2_ws, not imported into this workspace |
 | Micro-XRCE-DDS-Agent | github.com/eProsima/Micro-XRCE-DDS-Agent | tag v2.4.3 | v2.x pairs with stock v1.15 firmware client |
 | Livox-SDK2 | github.com/Livox-SDK/Livox-SDK2 | master @ 2026-07-04 (installed to /usr/local) | Required by livox_ros_driver2 |
 | realsense2_camera | apt `ros-humble-realsense2-camera` (+ `ros-humble-librealsense2`) | 4.58.3 / librealsense2 2.58.3 | D435i color + depth views only (`d435i.launch.py`); debs, not source. V4L2 backend: the pointcloud param is `pointcloud__neon_.enable` |

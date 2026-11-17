@@ -39,7 +39,7 @@ public:
     min_free_gb_ = declare_parameter<double>("min_free_gb", 4.0);
     std::string root = declare_parameter<std::string>("output_dir", "");
     const std::string topic =
-      declare_parameter<std::string>("cloud_topic", "/cloud_registered");
+      declare_parameter<std::string>("lio_cloud_topic", "/cloud_registered");
     if (root.empty()) {
       const char * home = std::getenv("HOME");
       root = std::string(home != nullptr ? home : "/tmp") + "/map_exports";

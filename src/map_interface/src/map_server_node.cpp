@@ -71,14 +71,21 @@ public:
     // than this many seconds apart, the cloud is skipped.
     origin_max_dt_s_ = declare_parameter<double>("origin_max_dt_s", 0.15);
 
+    // LIO outputs. Upstream FAST-LIO: /cloud_registered, /Odometry. The fork:
+    // /fastlio2/world_cloud, /fastlio2/lio_odom (config/lio_<name>.yaml).
+    const std::string cloud_topic =
+      declare_parameter<std::string>("lio_cloud_topic", "/cloud_registered");
+    const std::string odom_topic =
+      declare_parameter<std::string>("lio_odom_topic", "/Odometry");
+
     core_ = std::make_unique<MapCore>(resolution, b, clearance_cap, unknown_occ);
 
     auto sensor_qos = rclcpp::QoS(rclcpp::KeepLast(2)).best_effort();
     cloud_sub_ = create_subscription<sensor_msgs::msg::PointCloud2>(
-      "/cloud_registered", sensor_qos,
+      cloud_topic, sensor_qos,
       std::bind(&MapServerNode::onCloud, this, _1));
     odom_sub_ = create_subscription<nav_msgs::msg::Odometry>(
-      "/Odometry", sensor_qos,
+      odom_topic, sensor_qos,
       std::bind(&MapServerNode::onOdom, this, _1));
 
     auto latched = rclcpp::QoS(rclcpp::KeepLast(1)).transient_local();
@@ -105,9 +112,9 @@ public:
     }
 
     RCLCPP_INFO(get_logger(),
-      "cpu_grid map: res %.2f m, bounds x[%.1f,%.1f] y[%.1f,%.1f] "
+      "inputs %s and %s; cpu_grid map: res %.2f m, bounds x[%.1f,%.1f] y[%.1f,%.1f] "
       "z[%.1f,%.1f] (odom/ENU), insert every %.1f s, range cut %.1f m",
-      resolution, b.x_min, b.x_max, b.y_min, b.y_max, b.z_min, b.z_max,
+      cloud_topic.c_str(), odom_topic.c_str(), resolution, b.x_min, b.x_max, b.y_min, b.y_max, b.z_min, b.z_max,
       insert_period_s_, max_insert_range_);
   }
 

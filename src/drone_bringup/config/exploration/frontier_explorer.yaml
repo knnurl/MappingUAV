@@ -78,4 +78,5 @@ frontier_explorer:
     map_node: /map_interface
     fence_node: /geofence_watchdog
     publish_markers: false
+    lio_odom_topic: /Odometry
     max_plan_time_s: 1.0

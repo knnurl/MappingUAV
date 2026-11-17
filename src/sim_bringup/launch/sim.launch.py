@@ -19,7 +19,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 
 
@@ -33,25 +33,29 @@ def generate_launch_description():
     bringup = get_package_share_directory('drone_bringup')
     venue = os.path.join(sim, 'config', 'venue_params_two_rooms.yaml')
     world = LaunchConfiguration('world')
+    lio = LaunchConfiguration('lio')
+    lio_params = PathJoinSubstitution([bringup, 'config', ['lio_', lio, '.yaml']])
     return LaunchDescription([
         DeclareLaunchArgument('world', default_value='two_rooms'),
+        # Topic naming of the LIO stack the fake LiDAR imitates (upstream | fork).
+        DeclareLaunchArgument('lio', default_value='upstream'),
         DeclareLaunchArgument('explorer', default_value='true'),
         DeclareLaunchArgument('save_map', default_value='false'),
         Node(package='sim_bringup', executable='fake_px4', output='screen'),
         Node(package='sim_bringup', executable='fake_lidar', output='screen',
-             parameters=[{'world': world}]),
+             parameters=[lio_params, {'world': world}]),
         Node(package='px4_odom_bridge', executable='odom_bridge_node',
-             name='px4_odom_bridge', output='screen', parameters=[venue]),
+             name='px4_odom_bridge', output='screen', parameters=[venue, lio_params]),
         Node(package='geofence_watchdog', executable='watchdog_node',
              name='geofence_watchdog', output='screen',
-             parameters=[os.path.join(bringup, 'config', 'geofence.yaml'), venue,
+             parameters=[os.path.join(bringup, 'config', 'geofence.yaml'), venue, lio_params,
                          {'require_streams_after_s': 10.0}]),
         IncludeLaunchDescription(PythonLaunchDescriptionSource(
             os.path.join(bringup, 'launch', 'gate5_as2.launch.py'))),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(bringup, 'launch', 'exploration.launch.py')),
-            launch_arguments={'venue_params': venue,
+            launch_arguments={'venue_params': venue, 'lio': lio,
                               'explorer': LaunchConfiguration('explorer'),
                               'save_map': LaunchConfiguration('save_map')}.items()),
     ])

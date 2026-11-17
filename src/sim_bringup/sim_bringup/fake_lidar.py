@@ -26,6 +26,9 @@ class FakeLidar(Node):
         super().__init__('fake_lidar')
         name = self.declare_parameter('world', 'two_rooms').value
         self.world = WORLDS[name]()
+        odom_topic = self.declare_parameter('lio_odom_topic', '/Odometry').value
+        cloud_topic = self.declare_parameter('lio_cloud_topic', '/cloud_registered').value
+        health_topic = self.declare_parameter('lio_health_topic', '').value
         self.dirs = ray_directions()
         self.pose = None                  # (x, y, z, yaw) in the LIO frame
         self.fault = 'ok'
@@ -33,12 +36,19 @@ class FakeLidar(Node):
         self.create_subscription(VehicleOdometry, '/fmu/out/vehicle_odometry',
                                  self.on_truth, qos_profile_sensor_data)
         self.create_subscription(String, '/sim/lio_fault', self.on_fault, 10)
-        self.odom_pub = self.create_publisher(Odometry, '/Odometry', 10)
-        self.cloud_pub = self.create_publisher(PointCloud2, '/cloud_registered', 10)
+        self.odom_pub = self.create_publisher(Odometry, odom_topic, 10)
+        self.cloud_pub = self.create_publisher(PointCloud2, cloud_topic, 10)
+        self.health_pub = None
+        if health_topic:                  # the fork's health message, when it is installed
+            from interface.msg import LioHealth
+            self.health_msg = LioHealth
+            self.health_pub = self.create_publisher(LioHealth, health_topic, 10)
         self.create_timer(0.1, self.tick)
         self.get_logger().info(f'fake LiDAR + LIO up, world "{name}"')
 
     def on_fault(self, msg):
+        # 'silent', 'jump', 'ok', and with the fork's naming 'degenerate'
+        # (odometry keeps coming, health reports an unconstrained direction).
         self.fault = msg.data
         if msg.data == 'jump':
             self.offset = np.array([3.0, 0.0, 0.0])
@@ -72,6 +82,16 @@ class FakeLidar(Node):
         cloud.is_dense = True
         cloud.data = pts.tobytes()
         self.cloud_pub.publish(cloud)
+        if self.health_pub is not None:
+            h = self.health_msg()
+            h.header = od.header
+            h.valid = True
+            h.points, h.matched = len(pts), int(0.56 * len(pts))
+            h.match_ratio, h.residual_rms, h.iterations = 0.56, 0.042, 2
+            h.translation_degeneracy = 0.02 if self.fault == 'degenerate' else 0.40
+            h.rotation_degeneracy = 0.5
+            h.weakest_translation_dir.x = 1.0
+            self.health_pub.publish(h)
 
 
 def main():

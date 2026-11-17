@@ -85,3 +85,17 @@ class TestValidation:
     def test_bad_thresholds_rejected(self):
         with pytest.raises(ValueError):
             HealthMonitor(min_rate_hz=0)
+
+
+def test_start_of_a_healthy_stream_is_not_degraded():
+    """One message in a one-second window is not a 1 Hz stream."""
+    mon = HealthMonitor()
+    states = [mon.update(k * 0.1, 0.0, 0.0, 1.0) for k in range(30)]
+    assert all(s == LioHealth.OK for s in states)
+
+
+def test_slow_stream_still_degrades_after_the_warm_up():
+    mon = HealthMonitor()
+    for k in range(6):
+        mon.update(k * 0.5, 0.0, 0.0, 1.0)          # 2 Hz
+    assert mon.state == LioHealth.DEGRADED

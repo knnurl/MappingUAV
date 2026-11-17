@@ -41,6 +41,7 @@ class HealthMonitor:
         self.state = LioHealth.OK
         self._degraded_reason = ''
         self._clean_since = None
+        self._first_t = None
 
     @property
     def reason(self):
@@ -68,12 +69,18 @@ class HealthMonitor:
                         f'(> {self.max_speed} m/s)')
         self.last = (t, x, y, z)
 
+        if self._first_t is None:
+            self._first_t = t
         self.stamps.append(t)
         while self.stamps and self.stamps[0] < t - self.window_s:
             self.stamps.popleft()
 
         clean = True
-        if len(self.stamps) / self.window_s < self.min_rate:
+        # The window is not full until window_s after the first sample: before
+        # that a healthy 10 Hz stream reads as "1 Hz" and the guard used to
+        # start DEGRADED for recover_after_s (seen on a replay, 2026-11-16).
+        warmed_up = t - self._first_t >= self.window_s
+        if warmed_up and len(self.stamps) / self.window_s < self.min_rate:
             self._degrade(
                 f'rate {len(self.stamps) / self.window_s:.1f} Hz '
                 f'< {self.min_rate} Hz')
@@ -97,3 +104,88 @@ class HealthMonitor:
             self._degrade('rate decay: '
                           f'{len(self.stamps) / self.window_s:.1f} Hz')
         return self.state
+
+
+class NativeHealthMonitor:
+    """Judges the FAST-LIO fork's per-scan health message (interface/LioHealth).
+
+    DEGRADED when, for persist_s without a healthy scan in between: the scan is
+    invalid (no point matched; the odometry is IMU prediction), or translation
+    degeneracy, match ratio or residual is outside its limit. Also DEGRADED when
+    no health message has arrived for silence_s. Recovery needs recover_after_s
+    of healthy scans.
+
+    The default limits are PROVISIONAL (fork docs/lio_health.md, 2026-11-16):
+    about half the healthiest minimum seen on three recordings, none of which
+    degraded. Healthy envelope seen: degeneracy >= 0.18, ratio >= 0.41,
+    residual <= 0.066 m.
+    """
+
+    def __init__(self, min_translation_degeneracy=0.08, min_match_ratio=0.25,
+                 max_residual_rms_m=0.10, persist_s=0.5, silence_s=1.0,
+                 recover_after_s=2.0):
+        if not (0 <= min_translation_degeneracy <= 1 and 0 <= min_match_ratio <= 1):
+            raise ValueError('degeneracy and ratio limits must be in [0, 1]')
+        if max_residual_rms_m <= 0 or persist_s < 0 or silence_s <= 0:
+            raise ValueError('limits must be positive')
+        self.min_deg = min_translation_degeneracy
+        self.min_ratio = min_match_ratio
+        self.max_rms = max_residual_rms_m
+        self.persist_s = persist_s
+        self.silence_s = silence_s
+        self.recover_after_s = recover_after_s
+        self.state = LioHealth.OK
+        self.reason = ''
+        self.last_t = None
+        self._bad_since = None
+        self._bad_why = ''
+        self._clean_since = None
+
+    def judge(self, valid, translation_degeneracy, match_ratio, residual_rms):
+        """'' for a healthy scan, otherwise why it is not."""
+        values = (translation_degeneracy, match_ratio, residual_rms)
+        if not valid:
+            return 'no point matched (IMU prediction only)'
+        if not all(math.isfinite(v) for v in values):
+            return 'non-finite health values'
+        if translation_degeneracy < self.min_deg:
+            return f'translation degeneracy {translation_degeneracy:.2f} < {self.min_deg}'
+        if match_ratio < self.min_ratio:
+            return f'match ratio {match_ratio:.2f} < {self.min_ratio}'
+        if residual_rms > self.max_rms:
+            return f'residual {residual_rms:.3f} m > {self.max_rms}'
+        return ''
+
+    def update(self, t, valid, translation_degeneracy, match_ratio, residual_rms):
+        self.last_t = t
+        why = self.judge(valid, translation_degeneracy, match_ratio, residual_rms)
+        if why:
+            self._clean_since = None
+            if self._bad_since is None:
+                self._bad_since, self._bad_why = t, why
+            if t - self._bad_since >= self.persist_s:
+                self.state, self.reason = LioHealth.DEGRADED, why
+        else:
+            self._bad_since = None
+            if self.state == LioHealth.DEGRADED:
+                if self._clean_since is None:
+                    self._clean_since = t
+                elif t - self._clean_since >= self.recover_after_s:
+                    self.state, self.reason = LioHealth.OK, ''
+                    self._clean_since = None
+        return self.state
+
+    def tick(self, t, started_t):
+        """Silence check. started_t: when the caller began listening."""
+        last = self.last_t if self.last_t is not None else started_t
+        if t - last > self.silence_s:
+            self.state = LioHealth.DEGRADED
+            self.reason = f'no LIO health message for {t - last:.1f} s'
+            self._clean_since = None
+        return self.state
+
+
+def combine(*monitors):
+    """Worst state of several monitors and the reasons of the degraded ones."""
+    bad = [m.reason for m in monitors if m.state == LioHealth.DEGRADED]
+    return (LioHealth.DEGRADED if bad else LioHealth.OK), '; '.join(bad)

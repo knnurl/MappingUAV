@@ -90,6 +90,7 @@ class Params:
     map_node: str = '/map_interface'
     fence_node: str = '/geofence_watchdog'
     publish_markers: bool = False
+    lio_odom_topic: str = '/Odometry'      # fork: /fastlio2/lio_odom (frame monitor only)
     max_plan_time_s: float = 1.0
 
     @property

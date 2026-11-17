@@ -11,7 +11,9 @@ Verified against cloned sources 2026-07-04:
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
@@ -38,6 +40,11 @@ def generate_launch_description():
         }],
     )
 
+    lio = LaunchConfiguration('lio')
+    is_fork = PythonExpression(["'", lio, "' == 'fork'"])
+    is_upstream = PythonExpression(["'", lio, "' == 'upstream'"])
+
+    # upstream: hku-mars FAST_LIO, the stack Gates 2 and 3 passed on.
     fast_lio = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(fast_lio_share, 'launch', 'mapping.launch.py')),
@@ -46,6 +53,21 @@ def generate_launch_description():
             'config_file': 'fast_lio_mid360_x500.yaml',
             'rviz': 'false',
         }.items(),
+        condition=IfCondition(is_upstream),
     )
 
-    return LaunchDescription([livox_driver, fast_lio])
+    # fork: knnurl/FASTLIO2_ROS2 lio_node. Needs the fork's `fastlio2` and
+    # `interface` packages in the environment; resolved only when chosen.
+    # Not flight-approved until docs/lio_swap_runbook.txt has been run.
+    fastlio2 = Node(
+        package='fastlio2', executable='lio_node', name='lio_node', namespace='fastlio2',
+        output='screen',
+        parameters=[{'config_path': os.path.join(bringup_share, 'config',
+                                                 'fastlio2_x500.yaml')}],
+        condition=IfCondition(is_fork),
+    )
+
+    return LaunchDescription([
+        DeclareLaunchArgument('lio', default_value='upstream',
+                              description='upstream (hku-mars FAST_LIO) or fork (FASTLIO2_ROS2)'),
+        livox_driver, fast_lio, fastlio2])
